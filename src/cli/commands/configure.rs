@@ -34,6 +34,12 @@ pub async fn exec(args: &ConfigureArgs) -> Result<()> {
         })?)
     };
 
+    let host = if !host.starts_with("https://") && !host.starts_with("http://") {
+        format!("https://{host}")
+    } else {
+        host
+    };
+
     let profile = Profile {
         host: Some(host),
         token: Some(token),

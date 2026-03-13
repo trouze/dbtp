@@ -95,11 +95,13 @@ pub fn load(overrides: ConfigOverrides) -> Result<Config> {
 
     let profile = file.profile.get(&profile_name).cloned().unwrap_or_default();
 
-    let host = overrides
-        .host
-        .or_else(|| std::env::var("DBTP_HOST").ok())
-        .or(profile.host)
-        .unwrap_or_else(|| "https://cloud.getdbt.com".into());
+    let host = normalize_host(
+        overrides
+            .host
+            .or_else(|| std::env::var("DBTP_HOST").ok())
+            .or(profile.host)
+            .unwrap_or_else(|| "https://cloud.getdbt.com".into()),
+    );
 
     let token = overrides
         .token
@@ -145,6 +147,15 @@ pub fn save_profile(name: &str, profile: &Profile) -> Result<()> {
     std::fs::write(&path, contents).map_err(DbtpError::Io)?;
 
     Ok(())
+}
+
+fn normalize_host(host: String) -> String {
+    let h = host.trim().trim_end_matches('/').to_string();
+    if h.starts_with("https://") || h.starts_with("http://") {
+        h
+    } else {
+        format!("https://{h}")
+    }
 }
 
 pub fn prompt(label: &str, default: &str) -> String {
