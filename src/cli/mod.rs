@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use self::commands::{
     accounts, artifacts, configure, dimension_values, environments, exposures, jobs, lineage,
     macros, metrics, models, projects, runs, saved_queries, seeds, semantic_models, snapshots,
-    sources, tests,
+    sources, system, tests,
 };
 
 #[derive(Debug, Parser)]
@@ -304,6 +304,19 @@ pub enum Commands {
             dbtp dimension-values list --metrics revenue,orders --group-by region,status"
     )]
     DimensionValues(dimension_values::DimensionValuesArgs),
+
+    /// Manage the dbtp installation
+    #[command(
+        long_about = "Manage the dbtp installation.\n\n\
+            Check version info, update to the latest release, or uninstall cleanly.",
+        after_long_help = "EXAMPLES:\n  \
+            dbtp system info\n  \
+            dbtp system update\n  \
+            dbtp system update --version v0.2.0\n  \
+            dbtp system uninstall\n  \
+            dbtp system uninstall --purge"
+    )]
+    System(system::SystemArgs),
 
     /// Generate shell completions
     #[command(

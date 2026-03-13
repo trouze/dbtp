@@ -17,7 +17,7 @@ dbtp metrics query revenue --group-by metric_time --grain MONTH
 curl -fsSL https://raw.githubusercontent.com/trouze/dbtp/main/install.sh | bash
 ```
 
-This downloads the latest prebuilt binary from [GitHub Releases](https://github.com/trouze/dbtp/releases) and installs it to `/usr/local/bin`. Set `DBTP_INSTALL_DIR` to customize the location.
+This downloads the latest prebuilt binary from [GitHub Releases](https://github.com/trouze/dbtp/releases) and installs it to `~/.local/bin`. Set `DBTP_INSTALL_DIR` to customize the location.
 
 ### From source via Git (requires Rust)
 
