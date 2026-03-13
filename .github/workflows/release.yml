@@ -90,5 +90,6 @@ jobs:
           gh release create ${{ github.ref_name }} \
             --title "dbtp ${{ github.ref_name }}" \
             --generate-notes \
+            --force \
             artifacts/dbtp-*.tar.gz \
             artifacts/sha256sums.txt
