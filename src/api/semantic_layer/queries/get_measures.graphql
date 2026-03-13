@@ -1,0 +1,8 @@
+query GetMeasures($environmentId: BigInt!, $metrics: [MetricInput!]!) {
+  measures(environmentId: $environmentId, metrics: $metrics) {
+    agg
+    aggTimeDimension
+    expr
+    name
+  }
+}

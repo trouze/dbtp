@@ -1,0 +1,9 @@
+query GetEntities($environmentId: BigInt!, $metrics: [MetricInput!]!, $search: String) {
+  entitiesPaginated(environmentId: $environmentId, metrics: $metrics, search: $search) {
+    items {
+      description
+      name
+      type
+    }
+  }
+}

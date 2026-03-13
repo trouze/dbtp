@@ -1,0 +1,3 @@
+query GetQueryableGranularities($environmentId: BigInt!, $metrics: [MetricInput!]!) {
+  queryableGranularities(environmentId: $environmentId, metrics: $metrics)
+}

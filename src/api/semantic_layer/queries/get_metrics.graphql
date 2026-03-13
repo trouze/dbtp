@@ -1,0 +1,13 @@
+query GetMetrics($environmentId: BigInt!, $search: String) {
+  metricsPaginated(environmentId: $environmentId, search: $search) {
+    items {
+      name
+      label
+      description
+      type
+      config {
+        meta
+      }
+    }
+  }
+}

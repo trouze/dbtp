@@ -1,0 +1,15 @@
+query GetDimensions($environmentId: BigInt!, $metrics: [MetricInput!]!, $search: String) {
+  dimensionsPaginated(environmentId: $environmentId, metrics: $metrics, search: $search) {
+    items {
+      description
+      name
+      type
+      queryableGranularities
+      queryableTimeGranularities
+      label
+      config {
+        meta
+      }
+    }
+  }
+}

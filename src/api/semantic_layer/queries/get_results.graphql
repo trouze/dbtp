@@ -1,0 +1,10 @@
+query GetResults($environmentId: BigInt!, $queryId: String!, $pageNum: Int) {
+  query(environmentId: $environmentId, queryId: $queryId, pageNum: $pageNum) {
+    arrowResult
+    error
+    queryId
+    sql
+    status
+    totalPages
+  }
+}

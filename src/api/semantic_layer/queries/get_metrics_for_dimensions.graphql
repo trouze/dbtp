@@ -1,0 +1,11 @@
+query GetMetricsForDimensions($environmentId: BigInt!, $dimensions: [GroupByInput!]!) {
+  metricsForDimensions(environmentId: $environmentId, dimensions: $dimensions) {
+    description
+    name
+    queryableGranularities
+    type
+    filter {
+      whereSqlTemplate
+    }
+  }
+}

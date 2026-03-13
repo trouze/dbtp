@@ -1,0 +1,25 @@
+query GetModels(
+  $environmentId: BigInt!
+  $modelsFilter: ModelAppliedFilter
+  $after: String
+  $first: Int
+  $sort: AppliedModelSort
+) {
+  environment(id: $environmentId) {
+    applied {
+      models(filter: $modelsFilter, after: $after, first: $first, sort: $sort) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            name
+            uniqueId
+            description
+          }
+        }
+      }
+    }
+  }
+}
