@@ -83,13 +83,20 @@ jobs:
           sha256sum dbtp-*.tar.gz > sha256sums.txt
           cat sha256sums.txt
 
-      - name: Create GitHub Release
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "dbtp ${{ github.ref_name }}" \
-            --generate-notes \
-            --force \
-            artifacts/dbtp-*.tar.gz \
-            artifacts/sha256sums.txt
+          if gh release view ${{ github.ref_name }} &>/dev/null; then
+            gh release upload ${{ github.ref_name }} \
+              artifacts/dbtp-*.tar.gz \
+              artifacts/sha256sums.txt \
+              --clobber
+          else
+            gh release create ${{ github.ref_name }} \
+              --title "dbtp ${{ github.ref_name }}" \
+              --generate-notes \
+              --draft \
+              artifacts/dbtp-*.tar.gz \
+              artifacts/sha256sums.txt
+          fi
