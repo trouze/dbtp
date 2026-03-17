@@ -24,8 +24,7 @@ use self::commands::{
         dbtp accounts list      Verify access\n  \
         dbtp projects list      List your projects",
     after_long_help = "EXAMPLES:\n  \
-        dbtp jobs trigger 48213 --cause \"nightly refresh\"\n  \
-        dbtp runs wait 901244 --interval 15\n  \
+        dbtp jobs trigger 48213 --cause \"nightly refresh\" --wait\n  \
         dbtp models health orders --environment-id 67890\n  \
         dbtp metrics query revenue --group-by metric_time --grain MONTH\n  \
         dbtp artifacts get 901244 manifest.json -o json"
@@ -60,9 +59,13 @@ pub struct GlobalOpts {
     #[arg(long, global = true, env = "DBTP_ACCOUNT_ID")]
     pub account_id: Option<u64>,
 
-    /// dbt Cloud environment ID (for Discovery / Semantic Layer)
+    /// dbt Cloud project ID (or project name)
+    #[arg(long, global = true, env = "DBTP_PROJECT_ID")]
+    pub project_id: Option<String>,
+
+    /// dbt Cloud environment ID (or environment name)
     #[arg(long, global = true, env = "DBTP_ENVIRONMENT_ID")]
-    pub environment_id: Option<u64>,
+    pub environment_id: Option<String>,
 
     /// Enable verbose output
     #[arg(long, short, global = true)]
@@ -114,10 +117,12 @@ pub enum Commands {
     /// Manage dbt Cloud environments
     #[command(
         long_about = "Manage dbt Cloud environments within a project.\n\n\
-            List, create, update, and delete environments. Requires --project-id.",
+            List, create, update, and delete environments. Uses --project-id,\n\
+            DBTP_PROJECT_ID, or the configured profile project.",
         after_long_help = "EXAMPLES:\n  \
+            dbtp environments list\n  \
             dbtp environments --project-id 123 list\n  \
-            dbtp environments --project-id 123 show 456\n  \
+            dbtp environments --project-id Analytics show 456\n  \
             dbtp environments --project-id 123 create --name staging --type deployment\n  \
             dbtp environments --project-id 123 delete 456"
     )]
@@ -141,12 +146,10 @@ pub enum Commands {
     /// Manage dbt Cloud runs
     #[command(
         long_about = "Manage dbt Cloud runs.\n\n\
-            List, inspect, cancel, and retry runs. Use 'wait' to poll until a run\n\
-            reaches a terminal state. Use 'errors' to extract failure details.",
+            List, inspect, cancel, and retry runs. Use 'errors' to extract failure details.",
         after_long_help = "EXAMPLES:\n  \
             dbtp runs list --job-id 48213 --status running\n  \
             dbtp runs show 901244\n  \
-            dbtp runs wait 901244 --interval 10 --timeout 1800\n  \
             dbtp runs errors 901244\n  \
             dbtp runs cancel 901244\n  \
             dbtp runs retry 901244"

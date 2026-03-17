@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use crate::api::admin::{self, jobs, runs};
 use crate::core::config::Config;
 use crate::core::error::{DbtpError, Result};
+use crate::core::resolve;
 use crate::core::rest_client::RestClient;
 
 #[derive(Debug, Args)]
@@ -16,8 +17,9 @@ pub struct JobsArgs {
 pub enum JobsCommand {
     /// List jobs
     List {
+        /// Project ID or name (falls back to config)
         #[arg(long)]
-        project_id: Option<u64>,
+        project_id: Option<String>,
         #[arg(long)]
         environment_id: Option<u64>,
         #[arg(long)]
@@ -29,8 +31,9 @@ pub enum JobsCommand {
     Create {
         #[arg(long)]
         name: String,
+        /// Project ID or name (falls back to config)
         #[arg(long)]
-        project_id: u64,
+        project_id: Option<String>,
         #[arg(long)]
         environment_id: u64,
     },
@@ -79,6 +82,7 @@ pub enum JobsCommand {
 
 pub async fn exec(args: &JobsArgs, client: &RestClient, config: &Config) -> Result<Value> {
     let is_compact = config.output == "compact";
+    let is_table = config.output == "table" || config.output.is_empty();
 
     match &args.command {
         JobsCommand::List {
@@ -87,7 +91,9 @@ pub async fn exec(args: &JobsArgs, client: &RestClient, config: &Config) -> Resu
             limit,
         } => {
             let mut params = Vec::new();
-            if let Some(pid) = project_id {
+            let raw_pid = project_id.as_deref().or(config.project_id.as_deref());
+            if let Some(raw) = raw_pid {
+                let pid = resolve::resolve_project(client, raw).await?;
                 params.push(("project_id".into(), pid.to_string()));
             }
             if let Some(eid) = environment_id {
@@ -95,7 +101,9 @@ pub async fn exec(args: &JobsArgs, client: &RestClient, config: &Config) -> Resu
             }
             let results = jobs::list(client, &params, *limit).await?;
             let val = Value::Array(results);
-            Ok(if is_compact {
+            Ok(if is_table {
+                admin::table_view(&val, admin::JOBS_TABLE_FIELDS)
+            } else if is_compact {
                 admin::compact_jobs(&val)
             } else {
                 val
@@ -107,9 +115,19 @@ pub async fn exec(args: &JobsArgs, client: &RestClient, config: &Config) -> Resu
             project_id,
             environment_id,
         } => {
+            let raw_pid = project_id
+                .as_deref()
+                .or(config.project_id.as_deref())
+                .ok_or_else(|| {
+                    DbtpError::config(
+                        "project_id is required for job creation; \
+                         set via --project-id, DBTP_PROJECT_ID, or `dbtp configure`",
+                    )
+                })?;
+            let pid = resolve::resolve_project(client, raw_pid).await?;
             let body = json!({
                 "name": name,
-                "project_id": project_id,
+                "project_id": pid,
                 "environment_id": environment_id,
             });
             jobs::create(client, &body).await

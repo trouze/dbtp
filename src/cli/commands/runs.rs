@@ -35,6 +35,7 @@ pub enum RunsCommand {
 
 pub async fn exec(args: &RunsArgs, client: &RestClient, config: &Config) -> Result<Value> {
     let is_compact = config.output == "compact";
+    let is_table = config.output == "table" || config.output.is_empty();
 
     match &args.command {
         RunsCommand::List {
@@ -51,7 +52,9 @@ pub async fn exec(args: &RunsArgs, client: &RestClient, config: &Config) -> Resu
             }
             let results = runs::list(client, &params, *limit).await?;
             let val = Value::Array(results);
-            Ok(if is_compact {
+            Ok(if is_table {
+                admin::table_view(&val, admin::RUNS_TABLE_FIELDS)
+            } else if is_compact {
                 admin::compact_runs(&val)
             } else {
                 val

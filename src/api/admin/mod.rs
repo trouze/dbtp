@@ -55,6 +55,63 @@ const RUNS_STRIP_FIELDS: &[&str] = &[
 
 const PROJECT_STRIP_FIELDS: &[&str] = &["freshness_job", "docs_job", "group_permissions"];
 
+pub const ACCOUNTS_TABLE_FIELDS: &[&str] = &[
+    "id",
+    "name",
+    "state",
+    "plan",
+    "developer_seats",
+    "run_slots",
+    "created_at",
+];
+
+pub const PROJECTS_TABLE_FIELDS: &[&str] = &[
+    "id",
+    "name",
+    "description",
+    "state",
+    "repository_id",
+    "connection_id",
+    "created_at",
+];
+
+pub const JOBS_TABLE_FIELDS: &[&str] = &[
+    "id",
+    "name",
+    "project_id",
+    "environment_id",
+    "job_type",
+    "state",
+    "dbt_version",
+];
+
+pub const RUNS_TABLE_FIELDS: &[&str] = &[
+    "id",
+    "job_id",
+    "project_id",
+    "status_humanized",
+    "duration",
+    "created_at",
+    "finished_at",
+];
+
+pub const ENVIRONMENTS_TABLE_FIELDS: &[&str] = &[
+    "id",
+    "name",
+    "type",
+    "state",
+    "project_id",
+    "dbt_version",
+    "created_at",
+];
+
+pub fn table_view(val: &Value, fields: &[&str]) -> Value {
+    match val {
+        Value::Array(arr) => Value::Array(arr.iter().map(|v| keep_fields(v, fields)).collect()),
+        other => keep_fields(other, fields),
+    }
+}
+
 pub fn compact_job(val: &Value) -> Value {
     keep_fields(val, JOBS_COMPACT_FIELDS)
 }
