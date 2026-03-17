@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 
 use crate::api::admin::{self, runs};
 use crate::core::config::Config;
-use crate::core::error::{DbtpError, Result};
+use crate::core::error::Result;
 use crate::core::rest_client::RestClient;
 
 #[derive(Debug, Args)]
@@ -29,22 +29,13 @@ pub enum RunsCommand {
     Cancel { id: u64 },
     /// Retry a failed run
     Retry { id: u64 },
-    /// Wait for a run to complete
-    Wait {
-        id: u64,
-        /// Polling interval in seconds
-        #[arg(long, default_value = "10")]
-        interval: u64,
-        /// Timeout in seconds
-        #[arg(long, default_value = "3600")]
-        timeout: u64,
-    },
     /// Show errors from a run (fetches run steps and extracts failures)
     Errors { id: u64 },
 }
 
 pub async fn exec(args: &RunsArgs, client: &RestClient, config: &Config) -> Result<Value> {
     let is_compact = config.output == "compact";
+    let is_table = config.output == "table" || config.output.is_empty();
 
     match &args.command {
         RunsCommand::List {
@@ -61,7 +52,9 @@ pub async fn exec(args: &RunsArgs, client: &RestClient, config: &Config) -> Resu
             }
             let results = runs::list(client, &params, *limit).await?;
             let val = Value::Array(results);
-            Ok(if is_compact {
+            Ok(if is_table {
+                admin::table_view(&val, admin::RUNS_TABLE_FIELDS)
+            } else if is_compact {
                 admin::compact_runs(&val)
             } else {
                 val
@@ -77,50 +70,10 @@ pub async fn exec(args: &RunsArgs, client: &RestClient, config: &Config) -> Resu
         }
         RunsCommand::Cancel { id } => runs::cancel(client, *id).await,
         RunsCommand::Retry { id } => runs::retry(client, *id).await,
-        RunsCommand::Wait {
-            id,
-            interval,
-            timeout,
-        } => wait_for_run(client, *id, *interval, *timeout).await,
         RunsCommand::Errors { id } => {
             let run = runs::get_with_steps(client, *id).await?;
             Ok(extract_run_errors(&run))
         }
-    }
-}
-
-async fn wait_for_run(
-    client: &RestClient,
-    run_id: u64,
-    interval: u64,
-    timeout: u64,
-) -> Result<Value> {
-    let start = std::time::Instant::now();
-    let mut last_status = String::new();
-
-    loop {
-        let run = runs::get(client, run_id).await?;
-        let status = run["status_humanized"]
-            .as_str()
-            .unwrap_or("Unknown")
-            .to_string();
-
-        if status != last_status {
-            eprintln!("Run {run_id}: {status}");
-            last_status = status;
-        }
-
-        if run["is_complete"].as_bool().unwrap_or(false) {
-            return Ok(run);
-        }
-
-        if start.elapsed().as_secs() >= timeout {
-            return Err(DbtpError::config(format!(
-                "Timeout waiting for run {run_id} after {timeout}s"
-            )));
-        }
-
-        tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
     }
 }
 

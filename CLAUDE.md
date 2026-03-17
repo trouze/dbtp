@@ -67,8 +67,9 @@ dbtp/
 │   │       └── dimension_values.rs
 │   └── core/                          # Shared infrastructure
 │       ├── mod.rs
-│       ├── config.rs                  # Profile loading/saving, env var fallback, config.toml
+│       ├── config.rs                  # Profile loading/saving, env var fallback, config.toml, interactive helpers
 │       ├── error.rs                   # DbtpError enum (Http, Config, GraphQL, Api, Io, Json, Arrow)
+│       ├── resolve.rs                 # Name-or-ID resolution for projects and environments
 │       ├── rest_client.rs             # REST client: v2/v3 URL routing, auth, pagination, envelope unwrapping
 │       └── graphql_client.rs          # GraphQL client for Discovery + Semantic Layer
 ├── openapi/                           # Reference OpenAPI specs (not used at build time)
@@ -89,6 +90,8 @@ dbtp/
 - **Auto-pagination**: `RestClient::paginate_v2` / `paginate_v3` loop through offset-based pages (100 per request) until `total_count` is reached or `--limit` is satisfied.
 - **Envelope unwrapping**: dbt Cloud REST APIs return `{ data, status, extra }`. The client strips this automatically via `unwrap_envelope()`.
 - **Compact mode**: A `compact` output format provides single-line JSON and uses `compact_*` helpers in `api/admin/mod.rs` to reduce verbose API responses to essential fields.
+- **Interactive configure**: `dbtp configure` detects whether stdin is a TTY. In interactive terminals, it fetches projects and environments via the API and offers a numbered selection menu. The `--non-interactive` flag or a non-TTY stdin falls through to plain ID prompts. API errors during interactive configure are handled gracefully with a fallback to manual entry.
+- **Name-or-ID resolution**: `project_id` and `environment_id` accept names or numeric IDs everywhere (config, env vars, CLI flags). `core/resolve.rs` tries `parse::<u64>()` first (zero API calls), then falls back to a list+filter API call with case-insensitive exact matching.
 
 ## Building and running
 
@@ -104,7 +107,9 @@ The release profile enables `strip = true`, `lto = true`, `codegen-units = 1` fo
 
 Config lives at `~/.config/dbtp/config.toml` (macOS) via the `directories` crate's `ProjectDirs::from("com", "dbt-labs", "dbtp")`.
 
-Precedence: CLI flags > env vars (`DBTP_TOKEN`, `DBTP_HOST`, `DBTP_ACCOUNT_ID`, `DBTP_ENVIRONMENT_ID`) > profile config > defaults.
+Precedence: CLI flags > env vars (`DBTP_TOKEN`, `DBTP_HOST`, `DBTP_ACCOUNT_ID`, `DBTP_PROJECT_ID`, `DBTP_ENVIRONMENT_ID`) > profile config > defaults.
+
+`project_id` and `environment_id` accept either a numeric ID or a name. Names are resolved to numeric IDs via a list+filter API call (case-insensitive exact match). Numeric IDs skip the API call entirely. Resolution happens in `main.rs` before command dispatch, so all downstream code receives numeric IDs.
 
 ## Key dependencies
 

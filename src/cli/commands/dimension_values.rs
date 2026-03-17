@@ -30,7 +30,7 @@ pub async fn exec(
     client: &GraphqlClient,
     config: &Config,
 ) -> Result<Value> {
-    let env_id = config.environment_id.ok_or_else(|| {
+    let env_id = config.environment_id_u64().ok_or_else(|| {
         DbtpError::config(
             "environment_id is required for Semantic Layer commands. \
              Set via --environment-id, DBTP_ENVIRONMENT_ID, or config profile.",

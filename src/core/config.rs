@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 
 use directories::ProjectDirs;
@@ -12,8 +12,19 @@ pub struct Config {
     pub host: String,
     pub token: String,
     pub account_id: Option<u64>,
-    pub environment_id: Option<u64>,
+    pub project_id: Option<String>,
+    pub environment_id: Option<String>,
     pub output: String,
+}
+
+impl Config {
+    pub fn project_id_u64(&self) -> Option<u64> {
+        self.project_id.as_ref().and_then(|s| s.parse().ok())
+    }
+
+    pub fn environment_id_u64(&self) -> Option<u64> {
+        self.environment_id.as_ref().and_then(|s| s.parse().ok())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -54,7 +65,8 @@ pub struct Profile {
     pub host: Option<String>,
     pub token: Option<String>,
     pub account_id: Option<u64>,
-    pub environment_id: Option<u64>,
+    pub project_id: Option<String>,
+    pub environment_id: Option<String>,
 }
 
 pub struct ConfigOverrides {
@@ -62,7 +74,8 @@ pub struct ConfigOverrides {
     pub host: Option<String>,
     pub token: Option<String>,
     pub account_id: Option<u64>,
-    pub environment_id: Option<u64>,
+    pub project_id: Option<String>,
+    pub environment_id: Option<String>,
     pub output: Option<String>,
 }
 
@@ -95,11 +108,13 @@ pub fn load(overrides: ConfigOverrides) -> Result<Config> {
 
     let profile = file.profile.get(&profile_name).cloned().unwrap_or_default();
 
-    let host = overrides
-        .host
-        .or_else(|| std::env::var("DBTP_HOST").ok())
-        .or(profile.host)
-        .unwrap_or_else(|| "https://cloud.getdbt.com".into());
+    let host = normalize_host(
+        overrides
+            .host
+            .or_else(|| std::env::var("DBTP_HOST").ok())
+            .or(profile.host)
+            .unwrap_or_else(|| "https://cloud.getdbt.com".into()),
+    );
 
     let token = overrides
         .token
@@ -113,11 +128,15 @@ pub fn load(overrides: ConfigOverrides) -> Result<Config> {
             .and_then(|v| v.parse().ok())
     }).or(profile.account_id);
 
-    let environment_id = overrides.environment_id.or_else(|| {
-        std::env::var("DBTP_ENVIRONMENT_ID")
-            .ok()
-            .and_then(|v| v.parse().ok())
-    }).or(profile.environment_id);
+    let project_id = overrides
+        .project_id
+        .or_else(|| std::env::var("DBTP_PROJECT_ID").ok())
+        .or(profile.project_id);
+
+    let environment_id = overrides
+        .environment_id
+        .or_else(|| std::env::var("DBTP_ENVIRONMENT_ID").ok())
+        .or(profile.environment_id);
 
     let output = overrides
         .output
@@ -127,6 +146,7 @@ pub fn load(overrides: ConfigOverrides) -> Result<Config> {
         host,
         token,
         account_id,
+        project_id,
         environment_id,
         output,
     })
@@ -147,6 +167,15 @@ pub fn save_profile(name: &str, profile: &Profile) -> Result<()> {
     Ok(())
 }
 
+fn normalize_host(host: String) -> String {
+    let h = host.trim().trim_end_matches('/').to_string();
+    if h.starts_with("https://") || h.starts_with("http://") {
+        h
+    } else {
+        format!("https://{h}")
+    }
+}
+
 pub fn prompt(label: &str, default: &str) -> String {
     if default.is_empty() {
         eprint!("{label}: ");
@@ -162,4 +191,30 @@ pub fn prompt(label: &str, default: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+pub fn is_interactive() -> bool {
+    io::stdin().is_terminal() && io::stderr().is_terminal()
+}
+
+/// Display a numbered selection menu and return the chosen value.
+/// `items` is a slice of `(display_label, id_value)` pairs.
+/// Returns `Some(id_value)` if the user picks an item, or `None` if they skip.
+pub fn prompt_select(label: &str, items: &[(String, String)]) -> Option<String> {
+    if items.is_empty() {
+        return None;
+    }
+    for (i, (display, id)) in items.iter().enumerate() {
+        eprintln!("  [{}] {} ({})", i + 1, display, id);
+    }
+    eprintln!("  [s] Skip");
+    let choice = prompt(&format!("{label}"), "s");
+    if choice.eq_ignore_ascii_case("s") || choice.is_empty() {
+        return None;
+    }
+    choice
+        .parse::<usize>()
+        .ok()
+        .filter(|&n| n >= 1 && n <= items.len())
+        .map(|n| items[n - 1].1.clone())
 }

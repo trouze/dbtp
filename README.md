@@ -3,8 +3,7 @@
 A fast, ergonomic command-line interface for the [dbt Cloud](https://www.getdbt.com/product/dbt-cloud) platform APIs. Manage accounts, projects, environments, jobs, and runs. Browse your dbt DAG through the Discovery API. Query metrics through the Semantic Layer. All from your terminal.
 
 ```
-dbtp jobs trigger 48213 --cause "deploy from CI"
-dbtp runs wait 901244 --interval 15
+dbtp jobs trigger 48213 --cause "deploy from CI" --wait
 dbtp models health orders
 dbtp metrics query revenue --group-by metric_time --grain MONTH
 ```
@@ -17,7 +16,7 @@ dbtp metrics query revenue --group-by metric_time --grain MONTH
 curl -fsSL https://raw.githubusercontent.com/trouze/dbtp/main/install.sh | bash
 ```
 
-This downloads the latest prebuilt binary from [GitHub Releases](https://github.com/trouze/dbtp/releases) and installs it to `/usr/local/bin`. Set `DBTP_INSTALL_DIR` to customize the location.
+This downloads the latest prebuilt binary from [GitHub Releases](https://github.com/trouze/dbtp/releases) and installs it to `~/.local/bin`. Set `DBTP_INSTALL_DIR` to customize the location.
 
 ### From source via Git (requires Rust)
 
@@ -41,7 +40,7 @@ cargo install --path .
 dbtp configure
 ```
 
-You'll be prompted for your dbt Cloud host, API token, account ID, and (optionally) an environment ID for Discovery/Semantic Layer commands. Configuration is saved to `~/.config/dbtp/config.toml`.
+You'll be prompted for your dbt Cloud host, API token, account ID, and optionally a project and environment ID. When running in an interactive terminal, `configure` offers a numbered picker for projects and environments so you don't have to look up IDs. Use `--non-interactive` to disable the picker. Configuration is saved to `~/.config/dbtp/config.toml`.
 
 ### 2. Verify access
 
@@ -54,8 +53,11 @@ dbtp accounts list
 ```bash
 dbtp projects list
 dbtp jobs list --project-id 12345
+dbtp jobs list --project-id Analytics         # name resolution
+dbtp environments list                         # uses configured project
 dbtp runs show 901244 -o json
 dbtp models list --environment-id 67890
+dbtp models list --environment-id Production   # name resolution
 ```
 
 ## Configuration
@@ -73,12 +75,15 @@ output = "table"
 host = "https://cloud.getdbt.com"
 token = "dbtc_..."
 account_id = 51798
+project_id = "12345"           # numeric ID or project name
+environment_id = "67890"       # numeric ID or environment name
 
 [profile.staging]
 host = "https://emea.dbt.com"
 token = "dbtc_..."
 account_id = 99999
-environment_id = 67890
+project_id = "Analytics"       # resolved to numeric ID at runtime
+environment_id = "Production"
 ```
 
 ### Environment variables
@@ -88,7 +93,8 @@ environment_id = 67890
 | `DBTP_HOST` | dbt Cloud host URL |
 | `DBTP_TOKEN` | API token (service token or personal access token) |
 | `DBTP_ACCOUNT_ID` | Default account ID |
-| `DBTP_ENVIRONMENT_ID` | Default environment ID (Discovery / Semantic Layer) |
+| `DBTP_PROJECT_ID` | Default project ID or name |
+| `DBTP_ENVIRONMENT_ID` | Default environment ID or name (Discovery / Semantic Layer) |
 
 ### Precedence
 
@@ -170,8 +176,7 @@ dbtp jobs list -o compact | jq '.[].name'
 ### Trigger a job and wait for completion
 
 ```bash
-dbtp jobs trigger 48213 --cause "nightly refresh"
-dbtp runs wait 901244 --interval 10 --timeout 1800
+dbtp jobs trigger 48213 --cause "nightly refresh" --wait
 ```
 
 ### Inspect a failed run
@@ -233,9 +238,14 @@ dbtp artifacts get 901244 run_results.json
 | `--host <url>` | | dbt Cloud host URL |
 | `--token <token>` | | API token |
 | `--account-id <id>` | | dbt Cloud account ID |
-| `--environment-id <id>` | | Environment ID (Discovery / Semantic Layer) |
+| `--project-id <id-or-name>` | | Project ID or name |
+| `--environment-id <id-or-name>` | | Environment ID or name (Discovery / Semantic Layer) |
 | `--verbose` | `-v` | Enable verbose output |
 | `--query <jmespath>` | | JMESPath expression to filter JSON output |
+
+### Name resolution
+
+`--project-id` and `--environment-id` accept either a numeric ID or a project/environment **name**. When a name is given, the CLI resolves it to the numeric ID via a list API call with case-insensitive exact matching. Numeric IDs bypass the API call entirely (zero overhead). The same applies to `DBTP_PROJECT_ID`, `DBTP_ENVIRONMENT_ID`, and the config file values.
 
 ## Shell Completions
 
@@ -260,20 +270,8 @@ dbtp completion powershell > _dbtp.ps1
 - **API version routing** is handled automatically. The v2/v3 split in dbt Cloud's API is invisible to users — each command knows which version to use.
 - **Response envelope unwrapping** — dbt Cloud APIs return responses wrapped in `{ data, status, extra }`. The CLI strips the envelope and presents `data` directly.
 - **Auto-pagination** — `list` commands transparently paginate through all results. Use `--limit` to cap the total.
-- **Waiters** — `dbtp runs wait` polls until a run reaches a terminal state, printing status transitions as they happen.
+- **Waiters** — `dbtp jobs trigger --wait` polls until a triggered run reaches a terminal state, printing status transitions as they happen.
 
-## Releasing
-
-Releases are automated via GitHub Actions. To cut a release:
-
-```bash
-# Update version in Cargo.toml, then:
-git commit -am "release: v0.1.0"
-git tag v0.1.0
-git push && git push --tags
-```
-
-The [release workflow](.github/workflows/release.yml) builds binaries for macOS (arm64 + x86_64) and Linux (x86_64 + arm64), then creates a GitHub Release with all artifacts and checksums.
 
 ## License
 

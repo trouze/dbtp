@@ -41,12 +41,14 @@ pub fn metadata_url(host: &str) -> String {
 }
 
 pub fn require_environment_id(config: &Config) -> Result<u64> {
-    config.environment_id.ok_or_else(|| {
-        DbtpError::config(
-            "environment_id is required for Discovery API; \
-             set via --environment-id, DBTP_ENVIRONMENT_ID, or `dbtp configure`",
-        )
-    })
+    config
+        .environment_id_u64()
+        .ok_or_else(|| {
+            DbtpError::config(
+                "environment_id is required for Discovery API; \
+                 set via --environment-id, DBTP_ENVIRONMENT_ID, or `dbtp configure`",
+            )
+        })
 }
 
 /// Extract nodes from paginated GraphQL edges: `[{node: ...}, ...]` -> `[...]`

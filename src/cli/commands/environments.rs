@@ -1,16 +1,17 @@
 use clap::{Args, Subcommand};
 use serde_json::{json, Value};
 
-use crate::api::admin::environments;
+use crate::api::admin::{self, environments};
 use crate::core::config::Config;
-use crate::core::error::Result;
+use crate::core::error::{DbtpError, Result};
+use crate::core::resolve;
 use crate::core::rest_client::RestClient;
 
 #[derive(Debug, Args)]
 pub struct EnvironmentsArgs {
-    /// Project ID (required for all environment operations)
+    /// Project ID or name (falls back to config/env var)
     #[arg(long)]
-    pub project_id: u64,
+    pub project_id: Option<String>,
 
     #[command(subcommand)]
     pub command: EnvironmentsCommand,
@@ -46,14 +47,30 @@ pub enum EnvironmentsCommand {
 pub async fn exec(
     args: &EnvironmentsArgs,
     client: &RestClient,
-    _config: &Config,
+    config: &Config,
 ) -> Result<Value> {
-    let pid = args.project_id;
+    let raw_pid = args
+        .project_id
+        .as_deref()
+        .or(config.project_id.as_deref())
+        .ok_or_else(|| {
+            DbtpError::config(
+                "project_id is required for environment operations; \
+                 set via --project-id, DBTP_PROJECT_ID, or `dbtp configure`",
+            )
+        })?;
+    let pid = resolve::resolve_project(client, raw_pid).await?;
+    let is_table = config.output == "table" || config.output.is_empty();
 
     match &args.command {
         EnvironmentsCommand::List { limit } => {
             let results = environments::list(client, pid, &[], *limit).await?;
-            Ok(Value::Array(results))
+            let val = Value::Array(results);
+            Ok(if is_table {
+                admin::table_view(&val, admin::ENVIRONMENTS_TABLE_FIELDS)
+            } else {
+                val
+            })
         }
         EnvironmentsCommand::Show { id } => environments::get(client, pid, *id).await,
         EnvironmentsCommand::Create { name, r#type } => {

@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="trouze/dbtp"
 BINARY="dbtp"
-INSTALL_DIR="${DBTP_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${DBTP_INSTALL_DIR:-$HOME/.local/bin}"
 
 get_latest_version() {
   curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
@@ -45,15 +45,23 @@ main() {
 
   curl -fsSL "${url}" | tar xz -C "${tmpdir}"
 
-  if [ -w "${INSTALL_DIR}" ]; then
-    mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-  else
-    echo "Installing to ${INSTALL_DIR} (requires sudo)..."
-    sudo mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-  fi
-
+  mkdir -p "${INSTALL_DIR}"
+  mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
   chmod +x "${INSTALL_DIR}/${BINARY}"
+
   echo "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
+
+  case ":${PATH}:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *)
+      echo ""
+      echo "NOTE: ${INSTALL_DIR} is not in your PATH."
+      echo "Add it by running:"
+      echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+      echo "Or add that line to your ~/.zshrc / ~/.bashrc."
+      ;;
+  esac
+
   "${INSTALL_DIR}/${BINARY}" --version
 }
 

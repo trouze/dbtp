@@ -42,11 +42,17 @@ pub enum ProjectsCommand {
 
 pub async fn exec(args: &ProjectsArgs, client: &RestClient, config: &Config) -> Result<Value> {
     let is_compact = config.output == "compact";
+    let is_table = config.output == "table" || config.output.is_empty();
 
     match &args.command {
         ProjectsCommand::List { limit } => {
             let results = projects::list(client, &[], *limit).await?;
-            Ok(Value::Array(results))
+            let val = Value::Array(results);
+            Ok(if is_table {
+                admin::table_view(&val, admin::PROJECTS_TABLE_FIELDS)
+            } else {
+                val
+            })
         }
         ProjectsCommand::Show { id } => {
             let val = projects::get(client, *id).await?;

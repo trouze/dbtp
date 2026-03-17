@@ -16,6 +16,7 @@ pub mod seeds;
 pub mod semantic_models;
 pub mod snapshots;
 pub mod sources;
+pub mod system;
 pub mod tests;
 
 use crate::cli::output::{format_output, OutputFormat};
@@ -42,6 +43,11 @@ pub async fn exec(
         Commands::Completion { shell } => {
             let mut cmd = <Cli as clap::CommandFactory>::command();
             clap_complete::generate(*shell, &mut cmd, "dbtp", &mut std::io::stdout());
+            return Ok(());
+        }
+
+        Commands::System(args) => {
+            system::exec(args).await?;
             return Ok(());
         }
 
