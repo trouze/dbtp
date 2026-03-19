@@ -22,7 +22,6 @@ async fn main() {
 
 async fn run(cli: Cli) -> crate::core::error::Result<()> {
     let overrides = ConfigOverrides {
-        profile: cli.global.profile.clone(),
         host: cli.global.host.clone(),
         token: cli.global.token.clone(),
         account_id: cli.global.account_id,
@@ -43,6 +42,14 @@ async fn run(cli: Cli) -> crate::core::error::Result<()> {
     if let Some(ref raw) = config.environment_id {
         let resolved = resolve::resolve_environment(&rest, config.project_id_u64(), raw).await?;
         config.environment_id = Some(resolved.to_string());
+    }
+
+    if config.environment_id.is_none() {
+        if let Some(pid) = config.project_id_u64() {
+            if let Ok(env_id) = resolve::resolve_production_environment(&rest, pid).await {
+                config.environment_id = Some(env_id.to_string());
+            }
+        }
     }
 
     cli::commands::exec(&cli.command, &rest, &gql, &config).await

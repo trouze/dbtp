@@ -121,7 +121,7 @@ pub async fn exec(args: &JobsArgs, client: &RestClient, config: &Config) -> Resu
                 .ok_or_else(|| {
                     DbtpError::config(
                         "project_id is required for job creation; \
-                         set via --project-id, DBTP_PROJECT_ID, or `dbtp configure`",
+                         set via --project-id, DBTP_PROJECT_ID, or `dbtp config set project-id`",
                     )
                 })?;
             let pid = resolve::resolve_project(client, raw_pid).await?;

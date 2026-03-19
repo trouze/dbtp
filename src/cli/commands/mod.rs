@@ -1,9 +1,10 @@
 pub mod accounts;
 pub mod artifacts;
-pub mod configure;
+pub mod config_cmd;
 pub mod dimension_values;
 pub mod environments;
 pub mod exposures;
+pub mod init;
 pub mod jobs;
 pub mod lineage;
 pub mod macros;
@@ -35,8 +36,13 @@ pub async fn exec(
     let output_format = OutputFormat::parse(&config.output);
 
     match cmd {
-        Commands::Configure(args) => {
-            configure::exec(args).await?;
+        Commands::Init(args) => {
+            init::exec(args).await?;
+            return Ok(());
+        }
+
+        Commands::Config(args) => {
+            config_cmd::exec(args).await?;
             return Ok(());
         }
 
