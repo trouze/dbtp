@@ -31,7 +31,7 @@ impl RestClient {
 
     pub fn account_id(&self) -> Result<u64> {
         self.account_id
-            .ok_or_else(|| DbtpError::config("account_id is required; set via --account-id, DBTP_ACCOUNT_ID, or `dbtp configure`"))
+            .ok_or_else(|| DbtpError::config("account_id is required; set via --account-id, DBTP_ACCOUNT_ID, or `dbtp init`"))
     }
 
     /// v2 base: /api/v2/accounts/{id}

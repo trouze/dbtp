@@ -65,7 +65,7 @@ pub fn require_environment_id(config: &Config) -> Result<u64> {
         .ok_or_else(|| {
             DbtpError::config(
                 "environment_id is required for Discovery API; \
-                 set via --environment-id, DBTP_ENVIRONMENT_ID, or `dbtp configure`",
+                 set via --environment-id or DBTP_ENVIRONMENT_ID",
             )
         })
 }

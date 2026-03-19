@@ -4,9 +4,9 @@ pub mod output;
 use clap::{Parser, Subcommand};
 
 use self::commands::{
-    accounts, artifacts, configure, dimension_values, environments, exposures, jobs, lineage,
-    macros, metrics, models, projects, runs, saved_queries, seeds, semantic_models, snapshots,
-    sources, system, tests,
+    accounts, artifacts, config_cmd, dimension_values, environments, exposures, init, jobs,
+    lineage, macros, metrics, models, projects, runs, saved_queries, seeds, semantic_models,
+    snapshots, sources, system, tests,
 };
 
 #[derive(Debug, Parser)]
@@ -20,7 +20,7 @@ use self::commands::{
         Manage accounts, projects, environments, jobs, and runs. Browse your DAG metadata.\n\
         Query metrics. All output formats (table, json, yaml) are supported.\n\n\
         Get started:\n  \
-        dbtp configure          Set up credentials\n  \
+        dbtp init               Set up credentials\n  \
         dbtp accounts list      Verify access\n  \
         dbtp projects list      List your projects",
     after_long_help = "EXAMPLES:\n  \
@@ -42,10 +42,6 @@ pub struct GlobalOpts {
     /// Output format: table, json, yaml, compact
     #[arg(long, short, global = true, default_value = "table")]
     pub output: Option<String>,
-
-    /// Named config profile to use
-    #[arg(long, global = true)]
-    pub profile: Option<String>,
 
     /// dbt Cloud host URL
     #[arg(long, global = true, env = "DBTP_HOST")]
@@ -78,16 +74,28 @@ pub struct GlobalOpts {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Set up CLI profiles and credentials
+    /// One-time account setup wizard
     #[command(
-        long_about = "Set up CLI profiles and credentials.\n\n\
-            Interactively configure a named profile with your dbt Cloud host, API token,\n\
-            account ID, and environment ID. Profiles are saved to ~/.config/dbtp/config.toml.",
+        long_about = "One-time account setup wizard.\n\n\
+            Interactively set your dbt Cloud host, API token, account ID, and optional\n\
+            default project. Credentials are saved to ~/.config/dbtp/config.toml.",
         after_long_help = "EXAMPLES:\n  \
-            dbtp configure                      # Configure the 'default' profile\n  \
-            dbtp configure --profile-name prod  # Configure a 'prod' profile"
+            dbtp init"
     )]
-    Configure(configure::ConfigureArgs),
+    Init(init::InitArgs),
+
+    /// Manage configuration properties
+    #[command(
+        long_about = "Manage configuration properties.\n\n\
+            List, get, set, or unset individual config values.\n\
+            Valid keys: host, token, account-id, project-id, output.",
+        after_long_help = "EXAMPLES:\n  \
+            dbtp config list\n  \
+            dbtp config set project-id my-project\n  \
+            dbtp config get host\n  \
+            dbtp config unset project-id"
+    )]
+    Config(config_cmd::ConfigArgs),
 
     // ── Admin API ──────────────────────────────────────
     /// Manage dbt Cloud accounts

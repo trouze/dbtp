@@ -56,7 +56,7 @@ pub async fn resolve_environment(
     let pid = project_id.ok_or_else(|| {
         DbtpError::config(
             "project_id is required to resolve an environment by name; \
-             set via --project-id, DBTP_PROJECT_ID, or `dbtp configure`",
+             set via --project-id, DBTP_PROJECT_ID, or `dbtp config set project-id`",
         )
     })?;
 
@@ -89,4 +89,22 @@ pub async fn resolve_environment(
             )))
         }
     }
+}
+
+/// Resolve the production environment for a project.
+/// Finds the environment with deployment_type == "production".
+pub async fn resolve_production_environment(
+    client: &RestClient,
+    project_id: u64,
+) -> Result<u64> {
+    let envs = environments::list(client, project_id, &[], None).await?;
+    envs.iter()
+        .find(|e| e["deployment_type"].as_str() == Some("production"))
+        .and_then(|e| e["id"].as_u64())
+        .ok_or_else(|| {
+            DbtpError::config(
+                "No production environment found for this project. \
+                 Specify one with --environment-id or DBTP_ENVIRONMENT_ID.",
+            )
+        })
 }
