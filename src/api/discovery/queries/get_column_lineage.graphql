@@ -1,0 +1,27 @@
+query GetColumnLineage(
+  $environmentId: BigInt!
+  $nodeUniqueId: String!
+) {
+  column(environmentId: $environmentId) {
+    lineage(nodeUniqueId: $nodeUniqueId) {
+      accountId
+      childColumns
+      depth
+      description
+      descriptionOriginColumnName
+      descriptionOriginResourceUniqueId
+      environmentId
+      error
+      errorCategory
+      isError
+      isPrimaryKey
+      name
+      nodeUniqueId
+      parentColumns
+      projectId
+      relationship
+      transformationType
+      uniqueId
+    }
+  }
+}

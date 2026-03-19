@@ -86,7 +86,10 @@ dbtp/
 - **Three-layer separation**: `core/` (config, clients, errors) → `api/` (request/response per API) → `cli/` (clap args, dispatch, output formatting). Commands in `cli/commands/` call into `api/` and return `serde_json::Value`; the dispatcher in `cli/commands/mod.rs` formats the result.
 - **Everything is `serde_json::Value`**: Rather than strongly-typed response structs, commands return `Value` and the output layer formats generically. This keeps the code lean and makes adding new fields/endpoints trivial.
 - **REST v2 vs v3**: The `RestClient` exposes `get_v2`/`get_v3`/etc. methods. v2 uses `Token` auth, v3 uses `Bearer` auth. Each `api/admin/*.rs` module knows which version its endpoints use. Users never see the version split.
-- **GraphQL clients**: `GraphqlClient` handles both Discovery API (at `{host}/graphql`) and Semantic Layer (at a different URL constructed by `semantic_layer::semantic_layer_url`). Discovery uses environment_id as a query variable; Semantic Layer encodes it in the URL path.
+- **GraphQL clients**: `GraphqlClient` handles both Discovery API and Semantic Layer (at a different URL constructed by `semantic_layer::semantic_layer_url`). Discovery uses environment_id as a query variable; Semantic Layer encodes it in the URL path. The Discovery API (metadata) URL is derived from the host by `discovery::metadata_url()`:
+  - Multi-tenant: `https://tk626.us1.dbt.com` → `https://tk626.metadata.us1.dbt.com/graphql`
+  - Legacy: `https://cloud.getdbt.com` → `https://metadata.cloud.getdbt.com/graphql`
+  - Column-level lineage uses the **beta** endpoint (`/beta/graphql`) via `GraphqlClient::discovery_beta()`.
 - **Auto-pagination**: `RestClient::paginate_v2` / `paginate_v3` loop through offset-based pages (100 per request) until `total_count` is reached or `--limit` is satisfied.
 - **Envelope unwrapping**: dbt Cloud REST APIs return `{ data, status, extra }`. The client strips this automatically via `unwrap_envelope()`.
 - **Compact mode**: A `compact` output format provides single-line JSON and uses `compact_*` helpers in `api/admin/mod.rs` to reduce verbose API responses to essential fields.
