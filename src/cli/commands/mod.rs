@@ -83,8 +83,14 @@ pub async fn exec(
             println!("{}", format_output(&val, output_format));
         }
         Commands::Lineage(args) => {
-            let val = lineage::exec(args, gql, config).await?;
-            println!("{}", format_output(&val, output_format));
+            match lineage::exec(args, gql, rest, config).await {
+                Ok(val) => println!("{}", format_output(&val, output_format)),
+                Err(crate::core::error::DbtpError::ImpactFound(report)) => {
+                    println!("{}", format_output(&report, output_format));
+                    std::process::exit(1);
+                }
+                Err(e) => return Err(e),
+            }
         }
         Commands::Sources(args) => {
             let val = sources::exec(args, gql, config).await?;

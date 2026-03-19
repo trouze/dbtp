@@ -1,0 +1,25 @@
+query GetPublicParentConsumers(
+  $environmentId: BigInt!
+  $filter: AppliedResourcesFilter!
+  $after: String
+  $first: Int
+) {
+  environment(id: $environmentId) {
+    applied {
+      resources(filter: $filter, after: $after, first: $first) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            uniqueId
+            name
+            resourceType
+            projectId
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+pub mod column_lineage;
 pub mod exposures;
 pub mod lineage;
 pub mod macros;
@@ -25,19 +26,37 @@ pub const DBT_BUILTIN_PACKAGES: &[&str] = &[
 ];
 
 /// Derive the Discovery metadata API base URL from the config host.
-/// e.g. "https://cloud.getdbt.com" -> "https://metadata.cloud.getdbt.com"
+///
+/// Multi-tenant (*.dbt.com): insert `metadata.` after the account slug.
+///   e.g. "https://tk626.us1.dbt.com" -> "https://tk626.metadata.us1.dbt.com"
+///
+/// Legacy (cloud.getdbt.com): prepend `metadata.`.
+///   e.g. "https://cloud.getdbt.com" -> "https://metadata.cloud.getdbt.com"
 pub fn metadata_url(host: &str) -> String {
     let host = host.trim_end_matches('/');
     if host.contains("metadata.") {
         return host.to_string();
     }
-    if let Some(rest) = host.strip_prefix("https://") {
-        format!("https://metadata.{rest}")
+
+    let (scheme, rest) = if let Some(rest) = host.strip_prefix("https://") {
+        ("https://", rest)
     } else if let Some(rest) = host.strip_prefix("http://") {
-        format!("http://metadata.{rest}")
+        ("http://", rest)
     } else {
-        format!("https://metadata.{host}")
+        ("https://", host)
+    };
+
+    // Multi-tenant pattern: {slug}.{region}.dbt.com → {slug}.metadata.{region}.dbt.com
+    if rest.ends_with(".dbt.com") && !rest.starts_with("cloud.") {
+        if let Some(dot) = rest.find('.') {
+            let slug = &rest[..dot];
+            let remainder = &rest[dot + 1..];
+            return format!("{scheme}{slug}.metadata.{remainder}");
+        }
     }
+
+    // Legacy: cloud.getdbt.com → metadata.cloud.getdbt.com
+    format!("{scheme}metadata.{rest}")
 }
 
 pub fn require_environment_id(config: &Config) -> Result<u64> {
