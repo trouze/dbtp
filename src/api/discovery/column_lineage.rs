@@ -355,7 +355,7 @@ pub async fn build_impact_report(
     let mut no_public_downstream: Vec<String> = Vec::new();
 
     for uid in unique_ids {
-        let downstream_public = find_downstream_public_via_node_lineage(
+        let mut downstream_public = find_downstream_public_via_node_lineage(
             client,
             host,
             environment_id,
@@ -363,6 +363,13 @@ pub async fn build_impact_report(
             &public_model_ids,
         )
         .await?;
+
+        // If the input model itself is a public model, treat it as its own public surface.
+        // The column filter (nodeUniqueId ∈ public_set) will then keep depth-0 columns
+        // (the model's own columns), which are exactly the ones consumers depend on.
+        if public_model_ids.contains(uid.as_str()) {
+            downstream_public.push(uid.clone());
+        }
 
         if downstream_public.is_empty() {
             no_public_downstream.push(uid.clone());
