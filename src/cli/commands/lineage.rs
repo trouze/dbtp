@@ -228,10 +228,18 @@ pub async fn exec(
             }
 
             if *fail_on_impact {
-                let has_consumers = report["summary"]["cross_project_consumers"]
-                    .as_array()
-                    .map_or(false, |a| !a.is_empty());
-                if has_consumers {
+                let should_fail = if effective_cross_project {
+                    // Cross-project mode: only fail when confirmed consumers are found.
+                    report["summary"]["cross_project_consumers"]
+                        .as_array()
+                        .map_or(false, |a| !a.is_empty())
+                } else {
+                    // No cross-project lookup: fail if any columns land in a public model.
+                    report["summary"]["total_impacts"]
+                        .as_u64()
+                        .map_or(false, |n| n > 0)
+                };
+                if should_fail {
                     return Err(DbtpError::ImpactFound(report));
                 }
             }
