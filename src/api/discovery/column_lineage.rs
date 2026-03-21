@@ -153,11 +153,14 @@ pub async fn resolve_files_to_unique_ids(
     )
     .await?;
 
+    eprintln!("resolving {} file path(s) against {} models in environment", file_paths.len(), models.len());
+
     let mut resolved = Vec::new();
     let mut unmatched = Vec::new();
 
     for input_path in file_paths {
         let normalized = normalize_path(input_path);
+        eprintln!("  matching input: {:?} (normalized: {:?})", input_path, normalized);
         let mut found = false;
 
         for model in &models {
@@ -166,6 +169,7 @@ pub async fn resolve_files_to_unique_ids(
 
             if suffix_match(&normalized, &normalized_model) {
                 if let Some(uid) = model["uniqueId"].as_str() {
+                    eprintln!("    matched -> {uid}  (filePath: {model_path:?})");
                     resolved.push(uid.to_string());
                     found = true;
                     break;
