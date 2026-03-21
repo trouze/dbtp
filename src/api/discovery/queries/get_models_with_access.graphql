@@ -1,0 +1,18 @@
+query GetModelsWithAccess($environmentId: BigInt!, $after: String, $first: Int) {
+  environment(id: $environmentId) {
+    applied {
+      models(after: $after, first: $first) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            uniqueId
+            access
+          }
+        }
+      }
+    }
+  }
+}
