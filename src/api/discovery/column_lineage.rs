@@ -11,6 +11,8 @@ use super::{extract_nodes, extract_path, metadata_url, paginate};
 
 const GET_COLUMN_LINEAGE: &str = include_str!("queries/get_column_lineage.graphql");
 const GET_MODELS_WITH_PATHS: &str = include_str!("queries/get_models_with_paths.graphql");
+const GET_MODELS_WITH_ACCESS: &str = include_str!("queries/get_models_with_access.graphql");
+const GET_FULL_LINEAGE: &str = include_str!("queries/get_full_lineage.graphql");
 const GET_PUBLIC_PARENT_CONSUMERS: &str = include_str!("queries/get_public_parent_consumers.graphql");
 
 /// Fetch column-level lineage for a single model.
@@ -179,11 +181,104 @@ pub async fn resolve_files_to_unique_ids(
     Ok((resolved, unmatched))
 }
 
+/// Fetch the set of unique_ids for all public models in `environment_id`.
+async fn get_public_model_ids(
+    client: &GraphqlClient,
+    host: &str,
+    environment_id: u64,
+) -> Result<HashSet<String>> {
+    let models = paginate(
+        client,
+        host,
+        environment_id,
+        GET_MODELS_WITH_ACCESS,
+        json!({}),
+        &["environment", "applied", "models", "edges"],
+        &["environment", "applied", "models", "pageInfo"],
+    )
+    .await?;
+
+    Ok(models
+        .into_iter()
+        .filter(|m| m["access"].as_str() == Some("public"))
+        .filter_map(|m| m["uniqueId"].as_str().map(String::from))
+        .collect())
+}
+
+/// Walk downstream from `root_ids` in the node-level lineage graph and return the unique_ids of
+/// any reachable model that is also in `public_model_ids`.
+///
+/// Uses `parentIds` from the full lineage graph rather than column-level edges, so it
+/// correctly crosses `select *` references that column lineage cannot represent.
+async fn find_downstream_public_via_node_lineage(
+    client: &GraphqlClient,
+    host: &str,
+    environment_id: u64,
+    root_ids: &[String],
+    public_model_ids: &HashSet<String>,
+) -> Result<Vec<String>> {
+    let meta_host = metadata_url(host);
+
+    let vars = json!({
+        "environmentId": environment_id,
+        "types": ["Model"],
+    });
+
+    let data = client
+        .discovery(&meta_host, environment_id, GET_FULL_LINEAGE, Some(vars))
+        .await?;
+
+    let all_nodes = data["environment"]["applied"]["lineage"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    // Build children_of: parent_id -> [child_ids]
+    let mut children_of: HashMap<String, Vec<String>> = HashMap::new();
+    for node in &all_nodes {
+        if let Some(uid) = node["uniqueId"].as_str() {
+            if let Some(parents) = node["parentIds"].as_array() {
+                for parent in parents {
+                    if let Some(pid) = parent.as_str() {
+                        children_of
+                            .entry(pid.to_string())
+                            .or_default()
+                            .push(uid.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // BFS downstream from root_ids
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+    for id in root_ids {
+        if visited.insert(id.clone()) {
+            queue.push_back(id.clone());
+        }
+    }
+
+    let mut downstream_public: Vec<String> = Vec::new();
+
+    while let Some(current) = queue.pop_front() {
+        if let Some(children) = children_of.get(&current) {
+            for child in children {
+                if visited.insert(child.clone()) {
+                    if public_model_ids.contains(child) {
+                        downstream_public.push(child.clone());
+                    }
+                    queue.push_back(child.clone());
+                }
+            }
+        }
+    }
+
+    Ok(downstream_public)
+}
+
 /// Discover all deployment environment IDs in the account, excluding `exclude_env`.
-async fn discover_deployment_envs(
-    rest: &RestClient,
-    exclude_env: u64,
-) -> Result<Vec<u64>> {
+async fn discover_deployment_envs(rest: &RestClient, exclude_env: u64) -> Result<Vec<u64>> {
     let all_projects = projects::list(rest, &[], None).await?;
     let mut env_ids: Vec<u64> = Vec::new();
 
@@ -191,10 +286,11 @@ async fn discover_deployment_envs(
         let Some(pid) = proj["id"].as_u64() else { continue };
         let envs = environments::list(rest, pid, &[], None).await?;
         for env in &envs {
-            let is_deployment = env["type"].as_str() == Some("deployment");
-            if let Some(eid) = env["id"].as_u64() {
-                if is_deployment && eid != exclude_env {
-                    env_ids.push(eid);
+            if env["type"].as_str() == Some("deployment") {
+                if let Some(eid) = env["id"].as_u64() {
+                    if eid != exclude_env {
+                        env_ids.push(eid);
+                    }
                 }
             }
         }
@@ -203,21 +299,23 @@ async fn discover_deployment_envs(
     Ok(env_ids)
 }
 
-/// Find models in `env_id` that consume any of the given `public_parent_ids` via mesh.
+/// Find models in `env_id` that declare any of `public_parent_ids` as a public parent.
+///
+/// Queries one public parent ID at a time so we can associate each consumer with the
+/// specific public model it references.
 async fn find_consumers_in_env(
     client: &GraphqlClient,
     host: &str,
     env_id: u64,
-    public_parent_ids: &[String],
-) -> Result<Vec<String>> {
+    public_parent_id: &str,
+) -> Result<Vec<Value>> {
     let meta_host = metadata_url(host);
-    let filter = json!({
-        "publicParents": public_parent_ids,
-        "types": ["Model"],
-    });
     let vars = json!({
         "environmentId": env_id,
-        "filter": filter,
+        "filter": {
+            "publicParents": [public_parent_id],
+            "types": ["Model"],
+        },
         "first": 100,
     });
 
@@ -226,307 +324,159 @@ async fn find_consumers_in_env(
         .await?;
 
     let edges = extract_path(&data, &["environment", "applied", "resources", "edges"]);
-    let nodes = extract_nodes(edges);
-
-    Ok(nodes
-        .iter()
-        .filter_map(|n| n["uniqueId"].as_str().map(String::from))
-        .collect())
+    Ok(extract_nodes(edges))
 }
 
-/// Build a cross-project impact report for one or more modified models.
+/// Analyze the impact of one or more changed models.
 ///
-/// For each model, fetches its full column lineage, then identifies downstream columns
-/// that belong to a different project. When `downstream_envs` is non-empty, also queries
-/// those environments for cross-project consumers via mesh. When empty, auto-discovers
-/// all deployment environments in the account.
+/// Phase 1 — same environment:
+///   1. Walk node-level lineage to find downstream public models.
+///   2. Fetch column-level lineage (downstream only), keep only columns landing in those
+///      public models. These are the columns at risk of breaking downstream consumers.
+///
+/// Phase 2 — cross-environment:
+///   For each impacted public model, query `downstream_envs` for mesh consumers.
+///   When `downstream_envs` is empty, auto-discovers all deployment environments
+///   in the account (slower but requires no configuration).
+///   Consumer models are attached to each impact under the `consumers` key.
 pub async fn build_impact_report(
     client: &GraphqlClient,
     rest: &RestClient,
     host: &str,
     environment_id: u64,
     unique_ids: &[String],
-    cross_project_only: bool,
     downstream_envs: &[u64],
 ) -> Result<Value> {
-    let mut all_impacts: Vec<Value> = Vec::new();
-    let mut models_analyzed: usize = 0;
-    let mut impacted_projects: HashSet<String> = HashSet::new();
-    let mut impacted_models: HashSet<String> = HashSet::new();
+    // ── Phase 1: columns that flow from changed models into downstream public models ──
 
-    // Determine the source project ID from the first model's column lineage
-    let mut source_project_id = String::new();
+    let public_model_ids = get_public_model_ids(client, host, environment_id).await?;
+
+    let mut all_impacts: Vec<Value> = Vec::new();
+    let mut no_public_downstream: Vec<String> = Vec::new();
 
     for uid in unique_ids {
-        let columns = fetch(client, host, environment_id, uid, false, false).await?;
-        let column_list = columns.as_array().cloned().unwrap_or_default();
+        let downstream_public = find_downstream_public_via_node_lineage(
+            client,
+            host,
+            environment_id,
+            &[uid.clone()],
+            &public_model_ids,
+        )
+        .await?;
 
-        if column_list.is_empty() {
+        if downstream_public.is_empty() {
+            no_public_downstream.push(uid.clone());
             continue;
         }
-        models_analyzed += 1;
 
-        if source_project_id.is_empty() {
-            source_project_id = column_list
-                .iter()
-                .find(|c| c["nodeUniqueId"].as_str() == Some(uid.as_str()))
-                .and_then(|c| c["projectId"].as_u64().or_else(|| c["projectId"].as_str().and_then(|s| s.parse().ok())))
-                .map(|id| id.to_string())
-                .unwrap_or_default();
-        }
+        let public_set: HashSet<&str> =
+            downstream_public.iter().map(String::as_str).collect();
 
-        let spid = column_list
-            .iter()
-            .find(|c| {
-                c["nodeUniqueId"].as_str() == Some(uid.as_str())
-                    && c["depth"].as_i64() == Some(0)
-            })
-            .and_then(|c| c["projectId"].as_str())
-            .or_else(|| {
-                column_list
-                    .iter()
-                    .find(|c| c["depth"].as_i64() == Some(0))
-                    .and_then(|c| c["projectId"].as_str())
-            })
-            .unwrap_or("");
+        let columns = fetch(client, host, environment_id, uid, true, false).await?;
+        let column_list = columns.as_array().cloned().unwrap_or_default();
 
-        let col_map: HashMap<&str, &Value> = column_list
-            .iter()
-            .filter_map(|c| c["uniqueId"].as_str().map(|id| (id, c)))
-            .collect();
-
-        let source_columns: Vec<&str> = column_list
-            .iter()
-            .filter(|c| c["nodeUniqueId"].as_str() == Some(uid.as_str()))
-            .filter_map(|c| c["uniqueId"].as_str())
-            .collect();
-
-        let downstream = bfs_downstream(&col_map, &source_columns);
-
-        for col_id in downstream {
-            let Some(col) = col_map.get(col_id) else {
-                continue;
-            };
-
-            let col_project = col["projectId"].as_str().unwrap_or("");
-            let is_cross_project = !spid.is_empty()
-                && !col_project.is_empty()
-                && col_project != spid;
-
-            if cross_project_only && !is_cross_project {
-                continue;
-            }
-
-            if col["nodeUniqueId"].as_str() == Some(uid.as_str()) {
-                continue;
-            }
-
+        for col in &column_list {
             let node_uid = col["nodeUniqueId"].as_str().unwrap_or("");
-            if is_cross_project {
-                impacted_projects.insert(col_project.to_string());
-                impacted_models.insert(node_uid.to_string());
+            if !public_set.contains(node_uid) {
+                continue;
             }
-
-            let parent_cols = col["parentColumns"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
-            let relevant_sources: Vec<&str> = parent_cols
-                .iter()
-                .filter(|p| {
-                    col_map
-                        .get(*p)
-                        .and_then(|c| c["depth"].as_i64())
-                        .map_or(false, |d| d >= 0)
-                })
-                .copied()
-                .collect();
 
             all_impacts.push(json!({
                 "source_model": uid,
-                "source_project": spid,
-                "impacted_column": col["name"].as_str().unwrap_or(""),
-                "impacted_column_id": col_id,
-                "impacted_model": node_uid,
-                "impacted_project": col_project,
-                "transformation": col["transformationType"].as_str().unwrap_or(""),
-                "is_cross_project": is_cross_project,
+                "public_model": node_uid,
+                "column_name": col["name"],
+                "column_id": col["uniqueId"],
+                "transformation": col["transformationType"],
                 "depth": col["depth"],
-                "parent_columns": relevant_sources,
+                "consumers": [],
             }));
         }
     }
 
-    // Cross-environment lookup: query downstream environments for mesh consumers
-    let target_env_ids = if downstream_envs.is_empty() {
-        eprintln!("Discovering deployment environments in account...");
-        discover_deployment_envs(rest, environment_id).await?
-    } else {
-        downstream_envs.to_vec()
-    };
+    // ── Phase 2: cross-environment consumer lookup ──
 
-    for ds_env_id in &target_env_ids {
-        let consumers = match find_consumers_in_env(client, host, *ds_env_id, unique_ids).await {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("warning: could not query environment {ds_env_id}: {e}");
-                continue;
-            }
+    // Unique public models that have at least one column impact.
+    let impacted_public_models: Vec<String> = all_impacts
+        .iter()
+        .filter_map(|i| i["public_model"].as_str().map(String::from))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if !impacted_public_models.is_empty() {
+        let target_env_ids: Vec<u64> = if downstream_envs.is_empty() {
+            eprintln!("discovering deployment environments in account...");
+            discover_deployment_envs(rest, environment_id).await?
+        } else {
+            downstream_envs.to_vec()
         };
 
-        if consumers.is_empty() {
-            continue;
+        // consumers_by_public_model: public_model_id -> [{model, project_id, environment_id}]
+        let mut consumers_by_public_model: HashMap<String, Vec<Value>> = HashMap::new();
+
+        for ds_env_id in &target_env_ids {
+            for pm_id in &impacted_public_models {
+                let consumers =
+                    match find_consumers_in_env(client, host, *ds_env_id, pm_id).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!(
+                                "warning: could not query env {ds_env_id} for consumers of {pm_id}: {e}"
+                            );
+                            continue;
+                        }
+                    };
+
+                for node in consumers {
+                    consumers_by_public_model
+                        .entry(pm_id.clone())
+                        .or_default()
+                        .push(json!({
+                            "model": node["uniqueId"],
+                            "project_id": node["projectId"],
+                            "environment_id": ds_env_id,
+                        }));
+                }
+            }
         }
 
-        for consumer_uid in &consumers {
-            let columns = match fetch(client, host, *ds_env_id, consumer_uid, false, false).await {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!(
-                        "warning: could not fetch column lineage for {consumer_uid} in env {ds_env_id}: {e}"
-                    );
-                    continue;
-                }
-            };
-            let column_list = columns.as_array().cloned().unwrap_or_default();
-            if column_list.is_empty() {
-                continue;
-            }
-
-            let col_map: HashMap<&str, &Value> = column_list
-                .iter()
-                .filter_map(|c| c["uniqueId"].as_str().map(|id| (id, c)))
-                .collect();
-
-            // Start BFS from columns belonging to the upstream (source) models
-            for uid in unique_ids {
-                let upstream_cols: Vec<&str> = column_list
-                    .iter()
-                    .filter(|c| c["nodeUniqueId"].as_str() == Some(uid.as_str()))
-                    .filter_map(|c| c["uniqueId"].as_str())
-                    .collect();
-
-                if upstream_cols.is_empty() {
-                    continue;
-                }
-                models_analyzed += 1;
-
-                let downstream = bfs_downstream(&col_map, &upstream_cols);
-
-                for col_id in downstream {
-                    let Some(col) = col_map.get(col_id) else { continue };
-
-                    let col_node = col["nodeUniqueId"].as_str().unwrap_or("");
-                    // Skip columns that belong to the source model itself
-                    if col_node == uid.as_str() {
-                        continue;
-                    }
-
-                    let col_project = col["projectId"]
-                        .as_u64()
-                        .map(|n| n.to_string())
-                        .or_else(|| col["projectId"].as_str().map(String::from))
-                        .unwrap_or_default();
-
-                    let is_cross = !source_project_id.is_empty()
-                        && !col_project.is_empty()
-                        && col_project != source_project_id;
-
-                    if cross_project_only && !is_cross {
-                        continue;
-                    }
-
-                    if is_cross {
-                        impacted_projects.insert(col_project.clone());
-                        impacted_models.insert(col_node.to_string());
-                    }
-
-                    all_impacts.push(json!({
-                        "source_model": uid,
-                        "source_project": source_project_id,
-                        "impacted_column": col["name"].as_str().unwrap_or(""),
-                        "impacted_column_id": col_id,
-                        "impacted_model": col_node,
-                        "impacted_project": col_project,
-                        "transformation": col["transformationType"].as_str().unwrap_or(""),
-                        "is_cross_project": is_cross,
-                        "depth": col["depth"],
-                        "downstream_environment_id": ds_env_id,
-                        "parent_columns": col["parentColumns"],
-                    }));
-                }
+        // Attach consumers to each impact row.
+        for impact in &mut all_impacts {
+            let pm = impact["public_model"].as_str().unwrap_or("").to_string();
+            if let Some(consumers) = consumers_by_public_model.get(&pm) {
+                impact["consumers"] = json!(consumers);
             }
         }
     }
 
-    let mut sorted_projects: Vec<String> = impacted_projects.into_iter().collect();
-    sorted_projects.sort();
-    let mut sorted_models: Vec<String> = impacted_models.into_iter().collect();
-    sorted_models.sort();
+    // ── Summary ──
+
+    let mut public_models_with_impact: Vec<String> = impacted_public_models.clone();
+    public_models_with_impact.sort();
+
+    let cross_project_consumers: Vec<&str> = all_impacts
+        .iter()
+        .flat_map(|i| {
+            i["consumers"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| c["model"].as_str())
+                .collect::<Vec<_>>()
+        })
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
 
     Ok(json!({
         "impacts": all_impacts,
         "summary": {
-            "models_analyzed": models_analyzed,
             "total_impacts": all_impacts.len(),
-            "cross_project_impacts": all_impacts.iter()
-                .filter(|i| i["is_cross_project"].as_bool() == Some(true))
-                .count(),
-            "impacted_projects": sorted_projects,
-            "impacted_models": sorted_models,
-        }
+            "public_models_with_impact": public_models_with_impact,
+            "cross_project_consumers": cross_project_consumers,
+            "models_without_public_downstream": no_public_downstream,
+        },
     }))
-}
-
-/// BFS downstream from a set of starting column IDs via childColumns edges.
-/// Returns all reachable column IDs (excluding the starting set).
-fn bfs_downstream<'a>(
-    col_map: &HashMap<&'a str, &Value>,
-    start_ids: &[&'a str],
-) -> Vec<&'a str> {
-    let mut visited: HashSet<&str> = HashSet::new();
-    let mut queue: VecDeque<&str> = VecDeque::new();
-
-    for &id in start_ids {
-        visited.insert(id);
-        queue.push_back(id);
-    }
-
-    let mut result: Vec<&str> = Vec::new();
-
-    while let Some(current) = queue.pop_front() {
-        let Some(col) = col_map.get(current) else {
-            continue;
-        };
-
-        let children = col["childColumns"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        for child_id in children {
-            if let Some(&child_key) = col_map.keys().find(|&&k| k == child_id) {
-                if visited.insert(child_key) {
-                    // Skip children ending with "*" (wildcard nodes)
-                    if !child_key.ends_with('*') {
-                        result.push(child_key);
-                        queue.push_back(child_key);
-                    }
-                }
-            }
-        }
-    }
-
-    result
 }
 
 fn normalize_path(path: &str) -> String {

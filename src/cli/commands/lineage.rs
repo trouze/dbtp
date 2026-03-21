@@ -3,7 +3,10 @@ use std::io::BufRead;
 use clap::{Args, Subcommand};
 use serde_json::Value;
 
+use serde_json::json;
+
 use crate::api::discovery::{column_lineage, lineage, require_environment_id};
+use crate::cli::output::OutputFormat;
 use crate::core::config::Config;
 use crate::core::error::{DbtpError, Result};
 use crate::core::graphql_client::GraphqlClient;
@@ -54,39 +57,39 @@ pub enum LineageCommand {
         upstream_only: bool,
     },
 
-    /// Analyze cross-project column impact (designed for CI)
+    /// Analyze public-model column impact of changed models (designed for CI)
+    ///
+    /// For each changed model, walks node-level lineage to find downstream public
+    /// models, then traces column-level lineage to report exactly which columns
+    /// from the changed model land in those public models.
+    ///
+    /// Inputs can be model unique IDs (model.project.name) or relative file paths
+    /// (models/staging/stg_teams.sql). Use --files to read paths from stdin.
     #[command(
-        long_about = "Analyze cross-project column impact for CI workflows.\n\n\
-            Accepts model unique IDs as positional arguments, or file paths via --files\n\
-            (read from stdin). For each model, fetches column-level lineage and identifies\n\
-            downstream columns in other projects that would be impacted.\n\n\
-            When using --files, pipe file paths from git diff:\n  \
-            git diff --name-only origin/main...HEAD -- '*.sql' | dbtp lineage impact --files",
         after_long_help = "EXAMPLES:\n  \
-            dbtp lineage impact model.analytics.orders --cross-project-only -o json\n  \
-            dbtp lineage impact model.analytics.orders model.analytics.customers \\\n    \
-                --cross-project-only --fail-on-impact\n  \
+            dbtp lineage impact model.analytics.orders -o json\n  \
+            dbtp lineage impact models/staging/stg_teams.sql\n  \
             git diff --name-only origin/main -- '*.sql' \\\n    \
-                | dbtp lineage impact --files --cross-project-only --fail-on-impact"
+                | dbtp lineage impact --files --fail-on-impact"
     )]
     Impact {
-        /// Model unique IDs (omit when using --files)
-        unique_ids: Vec<String>,
+        /// Model unique IDs or relative file paths (omit when using --files)
+        inputs: Vec<String>,
 
-        /// Read file paths from stdin and resolve to model unique IDs
+        /// Read file paths from stdin instead of positional arguments
         #[arg(long)]
         files: bool,
 
-        /// Only show impacts in other projects
+            /// Only show impacts that have at least one cross-project consumer
         #[arg(long)]
-        cross_project_only: bool,
+        cross_project: bool,
 
-        /// Exit with code 1 if any impacts are found
+        /// Exit with code 1 if any public-model impacts are found
         #[arg(long)]
         fail_on_impact: bool,
 
-        /// Downstream environment IDs to search for cross-project consumers.
-        /// When omitted, all deployment environments in the account are searched.
+        /// Downstream environment IDs to search for cross-project consumers (comma-separated).
+        /// When omitted, all deployment environments in the account are searched (slower).
         #[arg(long, value_delimiter = ',')]
         downstream_envs: Vec<u64>,
     },
@@ -124,13 +127,14 @@ pub async fn exec(
         }
 
         LineageCommand::Impact {
-            unique_ids,
+            inputs,
             files,
-            cross_project_only,
+            cross_project,
             fail_on_impact,
             downstream_envs,
         } => {
-            let resolved_ids = if *files {
+            // Collect raw inputs: either from stdin (--files) or positional args.
+            let raw_inputs: Vec<String> = if *files {
                 let stdin = std::io::stdin();
                 let paths: Vec<String> = stdin
                     .lock()
@@ -147,12 +151,36 @@ pub async fn exec(
                         "no file paths provided on stdin; pipe file paths with --files",
                     ));
                 }
+                paths
+            } else {
+                if inputs.is_empty() {
+                    return Err(DbtpError::config(
+                        "provide model unique IDs or file paths as arguments, \
+                         or use --files to read from stdin",
+                    ));
+                }
+                inputs.clone()
+            };
 
+            // Partition inputs into unique IDs (model.project.name) and file paths.
+            let mut resolved_ids: Vec<String> = Vec::new();
+            let mut file_paths: Vec<String> = Vec::new();
+
+            for input in &raw_inputs {
+                if is_file_path(input) {
+                    file_paths.push(input.clone());
+                } else {
+                    resolved_ids.push(input.clone());
+                }
+            }
+
+            // Resolve file paths to unique IDs via the Discovery API.
+            if !file_paths.is_empty() {
                 let (resolved, unmatched) = column_lineage::resolve_files_to_unique_ids(
                     client,
                     &config.host,
                     env_id,
-                    &paths,
+                    &file_paths,
                 )
                 .await?;
 
@@ -160,43 +188,152 @@ pub async fn exec(
                     eprintln!("warning: could not resolve file to a model: {path}");
                 }
 
-                if resolved.is_empty() {
-                    return Err(DbtpError::config(
-                        "none of the provided file paths matched any models in the environment",
-                    ));
-                }
+                resolved_ids.extend(resolved);
+            }
 
-                resolved
+            if resolved_ids.is_empty() {
+                return Err(DbtpError::config(
+                    "none of the provided inputs matched any models in the environment",
+                ));
+            }
+
+            // --downstream-envs implies --cross-project; --cross-project without
+            // --downstream-envs triggers auto-discovery of deployment environments.
+            let effective_cross_project = *cross_project || !downstream_envs.is_empty();
+            let effective_envs: &[u64] = if effective_cross_project {
+                downstream_envs
             } else {
-                if unique_ids.is_empty() {
-                    return Err(DbtpError::config(
-                        "provide model unique IDs as arguments, or use --files to read file paths from stdin",
-                    ));
-                }
-                unique_ids.clone()
+                &[]
             };
 
-            let report = column_lineage::build_impact_report(
+            let mut report = column_lineage::build_impact_report(
                 client,
                 rest,
                 &config.host,
                 env_id,
                 &resolved_ids,
-                *cross_project_only,
-                downstream_envs,
+                effective_envs,
             )
             .await?;
 
+            if effective_cross_project {
+                if let Some(impacts) = report["impacts"].as_array_mut() {
+                    impacts.retain(|i| {
+                        i["consumers"].as_array().map_or(false, |c| !c.is_empty())
+                    });
+                }
+                // Recount after filtering
+                let filtered_count = report["impacts"].as_array().map_or(0, |a| a.len());
+                report["summary"]["total_impacts"] = json!(filtered_count);
+            }
+
             if *fail_on_impact {
-                let impact_count = report["summary"]["total_impacts"]
-                    .as_u64()
-                    .unwrap_or(0);
-                if impact_count > 0 {
+                let has_consumers = report["summary"]["cross_project_consumers"]
+                    .as_array()
+                    .map_or(false, |a| !a.is_empty());
+                if has_consumers {
                     return Err(DbtpError::ImpactFound(report));
                 }
             }
 
-            Ok(report)
+            // For table output, reshape to a per-consumer summary instead of the raw
+            // impacts array (which has nested objects the generic formatter can't render).
+            if OutputFormat::parse(&config.output) == OutputFormat::Table {
+                Ok(consumer_summary_table(&report))
+            } else {
+                Ok(report)
+            }
         }
     }
+}
+
+/// Reshape the impact report into a flat array suitable for table display.
+///
+/// Produces one row per (consumer, public_model) pair with a count of the distinct
+/// columns from the source model that flow into that consumer.
+fn consumer_summary_table(report: &serde_json::Value) -> serde_json::Value {
+    use std::collections::HashMap;
+
+    // key: (consumer_model, public_model, project_id, environment_id)
+    let mut counts: HashMap<(String, String, String, String), usize> = HashMap::new();
+
+    if let Some(impacts) = report["impacts"].as_array() {
+        for impact in impacts {
+            let public_model = impact["public_model"].as_str().unwrap_or("").to_string();
+            let consumers = impact["consumers"].as_array();
+
+            if let Some(consumers) = consumers {
+                for c in consumers {
+                    let key = (
+                        c["model"].as_str().unwrap_or("").to_string(),
+                        public_model.clone(),
+                        c["project_id"].as_str()
+                            .map(String::from)
+                            .or_else(|| c["project_id"].as_u64().map(|n| n.to_string()))
+                            .unwrap_or_default(),
+                        c["environment_id"].as_u64()
+                            .map(|n| n.to_string())
+                            .unwrap_or_default(),
+                    );
+                    *counts.entry(key).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    if counts.is_empty() {
+        // No cross-project consumers found — show the public model summary instead.
+        let public_models: Vec<serde_json::Value> = report["summary"]["public_models_with_impact"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| {
+                let model = m.as_str().unwrap_or("").to_string();
+                let col_count = report["impacts"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter(|i| i["public_model"].as_str() == Some(model.as_str()))
+                            .count()
+                    })
+                    .unwrap_or(0);
+                json!({
+                    "public_model": model,
+                    "impacted_columns": col_count,
+                    "consumers": "none found",
+                })
+            })
+            .collect();
+
+        return json!(public_models);
+    }
+
+    let mut rows: Vec<serde_json::Value> = counts
+        .into_iter()
+        .map(|((consumer, public_model, project_id, environment_id), col_count)| {
+            json!({
+                "consumer_model": consumer,
+                "public_model": public_model,
+                "project_id": project_id,
+                "environment_id": environment_id,
+                "impacted_columns": col_count,
+            })
+        })
+        .collect();
+
+    rows.sort_by(|a, b| {
+        a["consumer_model"]
+            .as_str()
+            .cmp(&b["consumer_model"].as_str())
+    });
+
+    json!(rows)
+}
+
+/// Returns true if the input looks like a file path rather than a model unique ID.
+/// A unique ID has the form `type.project.name` (dots, no slashes).
+/// A file path contains a slash or ends with a SQL/Python extension.
+fn is_file_path(input: &str) -> bool {
+    input.contains('/') || input.ends_with(".sql") || input.ends_with(".py")
 }
