@@ -51,6 +51,10 @@ pub struct GlobalOpts {
     #[arg(long, global = true, env = "DBTP_TOKEN")]
     pub token: Option<String>,
 
+    /// Semantic Layer service token (required for metrics/saved-queries/dimension-values)
+    #[arg(long, global = true, env = "DBTP_SERVICE_TOKEN")]
+    pub service_token: Option<String>,
+
     /// dbt Cloud account ID
     #[arg(long, global = true, env = "DBTP_ACCOUNT_ID")]
     pub account_id: Option<u64>,

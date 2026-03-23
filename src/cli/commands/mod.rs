@@ -127,17 +127,23 @@ pub async fn exec(
             println!("{}", format_output(&val, output_format));
         }
 
-        // Semantic Layer API commands
+        // Semantic Layer API commands — require a service token
         Commands::Metrics(args) => {
-            let val = metrics::exec(args, gql, config).await?;
+            let sl_token = config.service_token.as_deref().unwrap_or(&config.token);
+            let gql_sl = GraphqlClient::new(sl_token)?;
+            let val = metrics::exec(args, &gql_sl, config).await?;
             println!("{}", format_output(&val, output_format));
         }
         Commands::SavedQueries(args) => {
-            let val = saved_queries::exec(args, gql, config).await?;
+            let sl_token = config.service_token.as_deref().unwrap_or(&config.token);
+            let gql_sl = GraphqlClient::new(sl_token)?;
+            let val = saved_queries::exec(args, &gql_sl, config).await?;
             println!("{}", format_output(&val, output_format));
         }
         Commands::DimensionValues(args) => {
-            let val = dimension_values::exec(args, gql, config).await?;
+            let sl_token = config.service_token.as_deref().unwrap_or(&config.token);
+            let gql_sl = GraphqlClient::new(sl_token)?;
+            let val = dimension_values::exec(args, &gql_sl, config).await?;
             println!("{}", format_output(&val, output_format));
         }
     }
