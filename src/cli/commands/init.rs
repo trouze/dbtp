@@ -49,6 +49,7 @@ pub async fn exec(args: &InitArgs) -> Result<()> {
         connection: Connection {
             host: Some(host),
             token: Some(token),
+            service_token: None,
             account_id: Some(account_id),
         },
         defaults: Defaults {

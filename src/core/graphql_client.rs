@@ -85,7 +85,7 @@ impl GraphqlClient {
     pub async fn semantic_layer(
         &self,
         host: &str,
-        environment_id: u64,
+        _environment_id: u64,
         query: &str,
         variables: Option<Value>,
     ) -> Result<Value> {
@@ -97,7 +97,6 @@ impl GraphqlClient {
         let body = json!({
             "query": query,
             "variables": variables.unwrap_or(json!({})),
-            "environmentId": environment_id,
         });
 
         let resp = self

@@ -24,6 +24,7 @@ async fn run(cli: Cli) -> crate::core::error::Result<()> {
     let overrides = ConfigOverrides {
         host: cli.global.host.clone(),
         token: cli.global.token.clone(),
+        service_token: cli.global.service_token.clone(),
         account_id: cli.global.account_id,
         project_id: cli.global.project_id.clone(),
         environment_id: cli.global.environment_id.clone(),

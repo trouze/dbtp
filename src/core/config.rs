@@ -10,6 +10,8 @@ use super::error::{DbtpError, Result};
 pub struct Config {
     pub host: String,
     pub token: String,
+    /// Service token for the Semantic Layer API. Falls back to `token` if not set.
+    pub service_token: Option<String>,
     pub account_id: Option<u64>,
     pub project_id: Option<String>,
     pub environment_id: Option<String>,
@@ -38,6 +40,7 @@ pub struct ConfigFile {
 pub struct Connection {
     pub host: Option<String>,
     pub token: Option<String>,
+    pub service_token: Option<String>,
     pub account_id: Option<u64>,
 }
 
@@ -64,6 +67,7 @@ fn default_output() -> String {
 pub struct ConfigOverrides {
     pub host: Option<String>,
     pub token: Option<String>,
+    pub service_token: Option<String>,
     pub account_id: Option<u64>,
     pub project_id: Option<String>,
     pub environment_id: Option<String>,
@@ -163,6 +167,11 @@ pub fn load(overrides: ConfigOverrides) -> Result<Config> {
         .or(file.connection.token)
         .unwrap_or_default();
 
+    let service_token = overrides
+        .service_token
+        .or_else(|| std::env::var("DBTP_SERVICE_TOKEN").ok())
+        .or(file.connection.service_token);
+
     let account_id = overrides
         .account_id
         .or_else(|| {
@@ -186,6 +195,7 @@ pub fn load(overrides: ConfigOverrides) -> Result<Config> {
     Ok(Config {
         host,
         token,
+        service_token,
         account_id,
         project_id,
         environment_id,
