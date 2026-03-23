@@ -25,10 +25,30 @@ impl OutputFormat {
 
 pub fn format_output(value: &Value, format: OutputFormat) -> String {
     match format {
-        OutputFormat::Json => serde_json::to_string_pretty(value).unwrap_or_default(),
+        OutputFormat::Json => {
+            serde_json::to_string_pretty(&sanitize_strings(value)).unwrap_or_default()
+        }
         OutputFormat::Yaml => serde_yaml::to_string(value).unwrap_or_default(),
         OutputFormat::Compact => serde_json::to_string(value).unwrap_or_default(),
         OutputFormat::Table => format_table(value),
+    }
+}
+
+/// Replace literal newlines and carriage returns in string values with spaces so that
+/// JSON output stays on single lines per value (some consumers reject unescaped newlines).
+fn sanitize_strings(value: &Value) -> Value {
+    match value {
+        Value::String(s) => {
+            let cleaned = s.replace('\r', "").replace('\n', " ");
+            Value::String(cleaned)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(sanitize_strings).collect()),
+        Value::Object(obj) => Value::Object(
+            obj.iter()
+                .map(|(k, v)| (k.clone(), sanitize_strings(v)))
+                .collect(),
+        ),
+        other => other.clone(),
     }
 }
 
