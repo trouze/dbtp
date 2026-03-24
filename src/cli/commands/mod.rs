@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod artifacts;
+pub mod audit_logs;
 pub mod config_cmd;
 pub mod dimension_values;
 pub mod environments;
@@ -81,6 +82,10 @@ pub async fn exec(
         Commands::Artifacts(args) => {
             let val = artifacts::exec(args, rest, config).await?;
             println!("{}", format_output(&val, output_format));
+        }
+        Commands::AuditLogs(args) => {
+            audit_logs::exec(args, rest, config).await?;
+            return Ok(());
         }
 
         // Discovery API commands

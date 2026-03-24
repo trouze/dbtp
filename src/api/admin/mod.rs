@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod artifacts;
+pub mod audit_logs;
 pub mod environments;
 pub mod jobs;
 pub mod projects;
