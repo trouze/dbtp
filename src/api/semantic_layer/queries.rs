@@ -38,6 +38,7 @@ pub async fn list_saved_queries(
         .unwrap_or(Value::Array(vec![])))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_query(
     client: &GraphqlClient,
     host: &str,
@@ -101,6 +102,7 @@ pub async fn execute_query(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn compile_sql(
     client: &GraphqlClient,
     host: &str,
@@ -144,7 +146,12 @@ pub async fn list_dimension_values(
     });
 
     let data = client
-        .semantic_layer(host, environment_id, CREATE_DIMENSION_VALUES_QUERY, Some(vars))
+        .semantic_layer(
+            host,
+            environment_id,
+            CREATE_DIMENSION_VALUES_QUERY,
+            Some(vars),
+        )
         .await?;
 
     let query_id = data["createDimensionValuesQuery"]["queryId"]
@@ -324,10 +331,7 @@ fn arrow_value_to_json(col: &dyn Array, row: usize) -> Value {
 
     match col.data_type() {
         DataType::Timestamp(TimeUnit::Second, _) => {
-            let arr = col
-                .as_any()
-                .downcast_ref::<TimestampSecondArray>()
-                .unwrap();
+            let arr = col.as_any().downcast_ref::<TimestampSecondArray>().unwrap();
             chrono::DateTime::from_timestamp(arr.value(row), 0)
                 .map(|d| Value::String(d.to_rfc3339()))
                 .unwrap_or(Value::Null)
@@ -445,11 +449,8 @@ mod tests {
         let names = StringArray::from(vec![Some("a"), None, Some("c")]);
         let values = Float64Array::from(vec![Some(1.0), Some(2.0), None]);
 
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![Arc::new(names), Arc::new(values)],
-        )
-        .unwrap();
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(names), Arc::new(values)]).unwrap();
 
         let mut buf = Vec::new();
         {

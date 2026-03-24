@@ -110,25 +110,25 @@ fn migrate_config(parsed: &toml::Value, path: &PathBuf) -> Result<ConfigFile> {
         .unwrap_or("default");
 
     let profile_table = parsed.get("profile");
-    let profile = profile_table
-        .and_then(|t| t.get(profile_name))
-        .or_else(|| {
-            profile_table
-                .and_then(|t| t.as_table())
-                .and_then(|t| t.values().next())
-        });
+    let profile = profile_table.and_then(|t| t.get(profile_name)).or_else(|| {
+        profile_table
+            .and_then(|t| t.as_table())
+            .and_then(|t| t.values().next())
+    });
 
     let mut new_config = ConfigFile::default();
 
     if let Some(p) = profile {
-        new_config.connection.host =
-            p.get("host").and_then(|v| v.as_str()).map(String::from);
-        new_config.connection.token =
-            p.get("token").and_then(|v| v.as_str()).map(String::from);
-        new_config.connection.account_id =
-            p.get("account_id").and_then(|v| v.as_integer()).map(|i| i as u64);
-        new_config.defaults.project_id =
-            p.get("project_id").and_then(|v| v.as_str()).map(String::from);
+        new_config.connection.host = p.get("host").and_then(|v| v.as_str()).map(String::from);
+        new_config.connection.token = p.get("token").and_then(|v| v.as_str()).map(String::from);
+        new_config.connection.account_id = p
+            .get("account_id")
+            .and_then(|v| v.as_integer())
+            .map(|i| i as u64);
+        new_config.defaults.project_id = p
+            .get("project_id")
+            .and_then(|v| v.as_str())
+            .map(String::from);
     }
 
     new_config.defaults.output = parsed
@@ -208,8 +208,8 @@ pub fn save_config(file: &ConfigFile) -> Result<()> {
     let dir = path.parent().unwrap();
     std::fs::create_dir_all(dir).map_err(DbtpError::Io)?;
 
-    let contents = toml::to_string_pretty(file)
-        .map_err(|e| DbtpError::config(format!("TOML error: {e}")))?;
+    let contents =
+        toml::to_string_pretty(file).map_err(|e| DbtpError::config(format!("TOML error: {e}")))?;
     std::fs::write(&path, contents).map_err(DbtpError::Io)?;
 
     Ok(())
@@ -307,6 +307,117 @@ pub fn prompt(label: &str, default: &str) -> String {
         default.to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_host_adds_https() {
+        assert_eq!(normalize_host("cloud.getdbt.com".into()), "https://cloud.getdbt.com");
+    }
+
+    #[test]
+    fn normalize_host_preserves_https() {
+        assert_eq!(
+            normalize_host("https://cloud.getdbt.com".into()),
+            "https://cloud.getdbt.com"
+        );
+    }
+
+    #[test]
+    fn normalize_host_preserves_http() {
+        assert_eq!(normalize_host("http://localhost".into()), "http://localhost");
+    }
+
+    #[test]
+    fn normalize_host_strips_trailing_slash() {
+        assert_eq!(
+            normalize_host("https://cloud.getdbt.com/".into()),
+            "https://cloud.getdbt.com"
+        );
+    }
+
+    #[test]
+    fn normalize_host_trims_whitespace() {
+        assert_eq!(
+            normalize_host("  https://cloud.getdbt.com  ".into()),
+            "https://cloud.getdbt.com"
+        );
+    }
+
+    #[test]
+    fn config_project_id_u64_parses_numeric() {
+        let cfg = Config {
+            host: String::new(),
+            token: String::new(),
+            service_token: None,
+            account_id: None,
+            project_id: Some("12345".into()),
+            environment_id: None,
+            output: "table".into(),
+        };
+        assert_eq!(cfg.project_id_u64(), Some(12345));
+    }
+
+    #[test]
+    fn config_project_id_u64_returns_none_for_name() {
+        let cfg = Config {
+            host: String::new(),
+            token: String::new(),
+            service_token: None,
+            account_id: None,
+            project_id: Some("my-project".into()),
+            environment_id: None,
+            output: "table".into(),
+        };
+        assert_eq!(cfg.project_id_u64(), None);
+    }
+
+    #[test]
+    fn config_environment_id_u64_parses_numeric() {
+        let cfg = Config {
+            host: String::new(),
+            token: String::new(),
+            service_token: None,
+            account_id: None,
+            project_id: None,
+            environment_id: Some("99".into()),
+            output: "table".into(),
+        };
+        assert_eq!(cfg.environment_id_u64(), Some(99));
+    }
+
+    #[test]
+    fn config_file_toml_round_trip() {
+        let toml = r#"
+            [connection]
+            host = "https://tk626.us1.dbt.com"
+            token = "abc123"
+            account_id = 7
+
+            [defaults]
+            project_id = "42"
+            output = "json"
+        "#;
+        let file: ConfigFile = toml::from_str(toml).unwrap();
+        assert_eq!(file.connection.host.as_deref(), Some("https://tk626.us1.dbt.com"));
+        assert_eq!(file.connection.account_id, Some(7));
+        assert_eq!(file.defaults.project_id.as_deref(), Some("42"));
+        assert_eq!(file.defaults.output, "json");
+    }
+
+    #[test]
+    fn config_file_defaults_output_is_table() {
+        let file: ConfigFile = toml::from_str("").unwrap();
+        assert_eq!(file.defaults.output, "table");
+    }
+
+    #[test]
+    fn prompt_select_returns_none_for_empty_list() {
+        assert_eq!(prompt_select("pick", &[]), None);
     }
 }
 

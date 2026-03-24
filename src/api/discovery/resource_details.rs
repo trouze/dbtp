@@ -85,7 +85,14 @@ pub async fn fetch_details(
     let unique_ids = if identifier.contains('.') {
         vec![identifier.clone()]
     } else {
-        resolve_unique_ids(client, &meta_host, environment_id, resource_type, &identifier).await?
+        resolve_unique_ids(
+            client,
+            &meta_host,
+            environment_id,
+            resource_type,
+            &identifier,
+        )
+        .await?
     };
 
     if unique_ids.is_empty() {

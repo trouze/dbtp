@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
 use serde::Deserialize;
@@ -176,7 +176,12 @@ async fn update(pin_version: Option<&str>) -> Result<()> {
     fs::write(&tarball, &bytes).map_err(DbtpError::Io)?;
 
     let status = std::process::Command::new("tar")
-        .args(["xzf", &tarball.to_string_lossy(), "-C", &tmpdir.to_string_lossy()])
+        .args([
+            "xzf",
+            &tarball.to_string_lossy(),
+            "-C",
+            &tmpdir.to_string_lossy(),
+        ])
         .status()
         .map_err(DbtpError::Io)?;
 
@@ -186,7 +191,9 @@ async fn update(pin_version: Option<&str>) -> Result<()> {
 
     let new_binary = tmpdir.join("dbtp");
     if !new_binary.exists() {
-        return Err(DbtpError::config("Extracted archive does not contain dbtp binary"));
+        return Err(DbtpError::config(
+            "Extracted archive does not contain dbtp binary",
+        ));
     }
 
     let backup = exe_path.with_extension("old");
@@ -203,8 +210,7 @@ async fn update(pin_version: Option<&str>) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&exe_path, fs::Permissions::from_mode(0o755))
-            .map_err(DbtpError::Io)?;
+        fs::set_permissions(&exe_path, fs::Permissions::from_mode(0o755)).map_err(DbtpError::Io)?;
     }
 
     fs::remove_file(&backup).ok();
@@ -244,7 +250,7 @@ fn uninstall(purge: bool) -> Result<()> {
     Ok(())
 }
 
-fn tempdir(near: &PathBuf) -> Result<PathBuf> {
+fn tempdir(near: &Path) -> Result<PathBuf> {
     let dir = near
         .parent()
         .unwrap_or(std::path::Path::new("/tmp"))

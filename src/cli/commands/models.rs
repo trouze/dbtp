@@ -1,9 +1,9 @@
 use clap::{Args, Subcommand};
 use serde_json::Value;
 
-use crate::api::discovery::{models, resource_details};
-use crate::api::discovery::resource_details::ResourceType;
 use crate::api::discovery::require_environment_id;
+use crate::api::discovery::resource_details::ResourceType;
+use crate::api::discovery::{models, resource_details};
 use crate::core::config::Config;
 use crate::core::error::Result;
 use crate::core::graphql_client::GraphqlClient;
@@ -57,11 +57,7 @@ pub enum ModelsCommand {
     },
 }
 
-pub async fn exec(
-    args: &ModelsArgs,
-    client: &GraphqlClient,
-    config: &Config,
-) -> Result<Value> {
+pub async fn exec(args: &ModelsArgs, client: &GraphqlClient, config: &Config) -> Result<Value> {
     let env_id = require_environment_id(config)?;
 
     match &args.command {
@@ -94,8 +90,15 @@ pub async fn exec(
             include_tests,
         } => {
             let uid = resolve_to_unique_id(client, config, env_id, identifier).await?;
-            models::performance(client, &config.host, env_id, &uid, *num_runs, *include_tests)
-                .await
+            models::performance(
+                client,
+                &config.host,
+                env_id,
+                &uid,
+                *num_runs,
+                *include_tests,
+            )
+            .await
         }
     }
 }
@@ -121,10 +124,7 @@ async fn resolve_to_unique_id(
 
     match &details {
         Value::Array(arr) if arr.len() > 1 => {
-            let matches: Vec<&str> = arr
-                .iter()
-                .filter_map(|d| d["uniqueId"].as_str())
-                .collect();
+            let matches: Vec<&str> = arr.iter().filter_map(|d| d["uniqueId"].as_str()).collect();
             Err(crate::core::error::DbtpError::graphql(format!(
                 "Multiple models found for '{}'. Provide a unique_id: {}",
                 identifier,
@@ -138,11 +138,8 @@ async fn resolve_to_unique_id(
             .ok_or_else(|| {
                 crate::core::error::DbtpError::graphql(format!("Model '{}' not found", identifier))
             }),
-        other => other["uniqueId"]
-            .as_str()
-            .map(String::from)
-            .ok_or_else(|| {
-                crate::core::error::DbtpError::graphql(format!("Model '{}' not found", identifier))
-            }),
+        other => other["uniqueId"].as_str().map(String::from).ok_or_else(|| {
+            crate::core::error::DbtpError::graphql(format!("Model '{}' not found", identifier))
+        }),
     }
 }

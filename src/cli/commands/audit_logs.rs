@@ -21,12 +21,10 @@ pub struct AuditLogsArgs {
 #[derive(Debug, Subcommand)]
 pub enum AuditLogsCommand {
     /// List recent audit log events
-    #[command(
-        after_long_help = "EXAMPLES:\n  \
+    #[command(after_long_help = "EXAMPLES:\n  \
             dbtp audit-logs list\n  \
             dbtp audit-logs list -o json\n  \
-            dbtp audit-logs list --include-related actor"
-    )]
+            dbtp audit-logs list --include-related actor")]
     List {
         /// Comma-separated related objects to include (e.g. actor)
         #[arg(long)]
@@ -50,8 +48,7 @@ pub enum AuditLogsCommand {
     ///
     /// Cloud CLI tools must be installed and authenticated independently —
     /// dbtp never handles cloud credentials.
-    #[command(
-        after_long_help = "EXAMPLES:\n  \
+    #[command(after_long_help = "EXAMPLES:\n  \
             # stdout (pipe to any tool)\n  \
             dbtp audit-logs export --since 2026-01-01T00:00:00Z\n\n  \
             # local file\n  \
@@ -62,8 +59,7 @@ pub enum AuditLogsCommand {
             dbtp audit-logs export --since 2026-01-01T00:00:00Z --output s3://my-bucket/audit-logs/\n\n  \
             # Azure Blob Storage (az CLI must be installed and authed)\n  \
             # format: az://storage-account/container/blob-path\n  \
-            dbtp audit-logs export --since 2026-01-01T00:00:00Z --output az://myaccount/mylogs/audit-logs/"
-    )]
+            dbtp audit-logs export --since 2026-01-01T00:00:00Z --output az://myaccount/mylogs/audit-logs/")]
     Export {
         /// Export events at or after this timestamp (RFC 3339, e.g. 2026-01-01T00:00:00Z)
         #[arg(long, required = true)]
@@ -89,14 +85,12 @@ pub async fn exec(args: &AuditLogsArgs, client: &RestClient, config: &Config) ->
         }
 
         AuditLogsCommand::Export { since, output } => {
-            let since_dt = since
-                .parse::<DateTime<Utc>>()
-                .map_err(|e| {
-                    DbtpError::config(format!(
-                        "invalid --since '{}': {}. Use RFC 3339, e.g. 2026-01-01T00:00:00Z",
-                        since, e
-                    ))
-                })?;
+            let since_dt = since.parse::<DateTime<Utc>>().map_err(|e| {
+                DbtpError::config(format!(
+                    "invalid --since '{}': {}. Use RFC 3339, e.g. 2026-01-01T00:00:00Z",
+                    since, e
+                ))
+            })?;
 
             let dest = resolve_destination(output, &since_dt);
 
@@ -140,9 +134,8 @@ fn write_ndjson(events: &[Value], destination: &str) -> Result<()> {
             write_lines(&mut w, events)?;
         }
         Dest::LocalFile(path) => {
-            let f = std::fs::File::create(&path).map_err(|e| {
-                DbtpError::config(format!("cannot create '{}': {}", path, e))
-            })?;
+            let f = std::fs::File::create(&path)
+                .map_err(|e| DbtpError::config(format!("cannot create '{}': {}", path, e)))?;
             let mut w = BufWriter::new(f);
             write_lines(&mut w, events)?;
         }
@@ -152,7 +145,11 @@ fn write_ndjson(events: &[Value], destination: &str) -> Result<()> {
         Dest::S3(url) => {
             pipe_to_cmd(events, "aws", &["s3", "cp", "-", &url])?;
         }
-        Dest::Azure { account, container, blob } => {
+        Dest::Azure {
+            account,
+            container,
+            blob,
+        } => {
             pipe_to_cmd(
                 events,
                 "az",

@@ -20,9 +20,7 @@ pub async fn create(client: &RestClient, body: &Value) -> Result<Value> {
 }
 
 pub async fn update(client: &RestClient, job_id: u64, body: &Value) -> Result<Value> {
-    client
-        .post_v2(&format!("jobs/{job_id}/"), body)
-        .await
+    client.post_v2(&format!("jobs/{job_id}/"), body).await
 }
 
 pub async fn delete(client: &RestClient, job_id: u64) -> Result<Value> {
@@ -30,9 +28,7 @@ pub async fn delete(client: &RestClient, job_id: u64) -> Result<Value> {
 }
 
 pub async fn trigger(client: &RestClient, job_id: u64, body: &Value) -> Result<Value> {
-    client
-        .post_v2(&format!("jobs/{job_id}/run/"), body)
-        .await
+    client.post_v2(&format!("jobs/{job_id}/run/"), body).await
 }
 
 pub async fn trigger_from_failure(client: &RestClient, job_id: u64) -> Result<Value> {

@@ -9,8 +9,7 @@ const GET_ENTITIES: &str = include_str!("queries/get_entities.graphql");
 const GET_MEASURES: &str = include_str!("queries/get_measures.graphql");
 const GET_QUERYABLE_GRANULARITIES: &str =
     include_str!("queries/get_queryable_granularities.graphql");
-const GET_METRICS_FOR_DIMENSIONS: &str =
-    include_str!("queries/get_metrics_for_dimensions.graphql");
+const GET_METRICS_FOR_DIMENSIONS: &str = include_str!("queries/get_metrics_for_dimensions.graphql");
 
 fn metric_inputs(names: &[String]) -> Vec<Value> {
     names.iter().map(|n| json!({"name": n})).collect()
@@ -114,7 +113,12 @@ pub async fn list_queryable_granularities(
         "metrics": metric_inputs(metrics),
     });
     let data = client
-        .semantic_layer(host, environment_id, GET_QUERYABLE_GRANULARITIES, Some(vars))
+        .semantic_layer(
+            host,
+            environment_id,
+            GET_QUERYABLE_GRANULARITIES,
+            Some(vars),
+        )
         .await?;
     Ok(data
         .get("queryableGranularities")

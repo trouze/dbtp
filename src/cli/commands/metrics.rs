@@ -167,11 +167,7 @@ fn build_where(where_clauses: &[String]) -> Vec<WhereInput> {
         .collect()
 }
 
-pub async fn exec(
-    args: &MetricsArgs,
-    client: &GraphqlClient,
-    config: &Config,
-) -> Result<Value> {
+pub async fn exec(args: &MetricsArgs, client: &GraphqlClient, config: &Config) -> Result<Value> {
     let env_id = require_env_id(config)?;
     let host = semantic_layer::semantic_layer_url(&config.host);
 
@@ -207,10 +203,8 @@ pub async fn exec(
                 .await
         }
         MetricsCommand::ForDimensions { dimensions } => {
-            semantic_layer::metrics::list_metrics_for_dimensions(
-                client, &host, env_id, dimensions,
-            )
-            .await
+            semantic_layer::metrics::list_metrics_for_dimensions(client, &host, env_id, dimensions)
+                .await
         }
         MetricsCommand::Query {
             metrics,

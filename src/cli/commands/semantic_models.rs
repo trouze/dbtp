@@ -1,8 +1,8 @@
 use clap::{Args, Subcommand};
 use serde_json::Value;
 
-use crate::api::discovery::{require_environment_id, resource_details};
 use crate::api::discovery::resource_details::ResourceType;
+use crate::api::discovery::{require_environment_id, resource_details};
 use crate::core::config::Config;
 use crate::core::error::Result;
 use crate::core::graphql_client::GraphqlClient;

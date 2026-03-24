@@ -25,11 +25,12 @@ impl GraphqlClient {
     pub async fn discovery(
         &self,
         host: &str,
-        environment_id: u64,
+        _environment_id: u64,
         query: &str,
         variables: Option<Value>,
     ) -> Result<Value> {
-        self.discovery_request(host, "graphql", query, variables).await
+        self.discovery_request(host, "graphql", query, variables)
+            .await
     }
 
     /// Execute a GraphQL query against the Discovery API beta endpoint.
@@ -37,11 +38,12 @@ impl GraphqlClient {
     pub async fn discovery_beta(
         &self,
         host: &str,
-        environment_id: u64,
+        _environment_id: u64,
         query: &str,
         variables: Option<Value>,
     ) -> Result<Value> {
-        self.discovery_request(host, "beta/graphql", query, variables).await
+        self.discovery_request(host, "beta/graphql", query, variables)
+            .await
     }
 
     async fn discovery_request(
@@ -51,11 +53,7 @@ impl GraphqlClient {
         query: &str,
         variables: Option<Value>,
     ) -> Result<Value> {
-        let url = format!(
-            "{}/{}",
-            host.trim_end_matches('/'),
-            path
-        );
+        let url = format!("{}/{}", host.trim_end_matches('/'), path);
 
         let body = json!({
             "query": query,
@@ -89,10 +87,7 @@ impl GraphqlClient {
         query: &str,
         variables: Option<Value>,
     ) -> Result<Value> {
-        let url = format!(
-            "{}/api/graphql",
-            host.trim_end_matches('/')
-        );
+        let url = format!("{}/api/graphql", host.trim_end_matches('/'));
 
         let body = json!({
             "query": query,

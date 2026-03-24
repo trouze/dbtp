@@ -143,7 +143,12 @@ pub async fn performance(
     });
 
     let data = client
-        .discovery(&meta_host, environment_id, GET_MODEL_PERFORMANCE, Some(vars))
+        .discovery(
+            &meta_host,
+            environment_id,
+            GET_MODEL_PERFORMANCE,
+            Some(vars),
+        )
         .await?;
 
     let runs = &data["environment"]["applied"]["modelHistoricalRuns"];

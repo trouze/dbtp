@@ -65,13 +65,11 @@ pub enum LineageCommand {
     ///
     /// Inputs can be model unique IDs (model.project.name) or relative file paths
     /// (models/staging/stg_teams.sql). Use --files to read paths from stdin.
-    #[command(
-        after_long_help = "EXAMPLES:\n  \
+    #[command(after_long_help = "EXAMPLES:\n  \
             dbtp lineage impact model.analytics.orders -o json\n  \
             dbtp lineage impact models/staging/stg_teams.sql\n  \
             git diff --name-only origin/main -- '*.sql' \\\n    \
-                | dbtp lineage impact --files --fail-on-impact"
-    )]
+                | dbtp lineage impact --files --fail-on-impact")]
     Impact {
         /// Model unique IDs or relative file paths (omit when using --files)
         inputs: Vec<String>,
@@ -80,7 +78,7 @@ pub enum LineageCommand {
         #[arg(long)]
         files: bool,
 
-            /// Only show impacts that have at least one cross-project consumer
+        /// Only show impacts that have at least one cross-project consumer
         #[arg(long)]
         cross_project: bool,
 
@@ -142,7 +140,11 @@ pub async fn exec(
                     .filter_map(|line| {
                         let l = line.ok()?;
                         let trimmed = l.trim().to_string();
-                        if trimmed.is_empty() { None } else { Some(trimmed) }
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed)
+                        }
                     })
                     .collect();
 
@@ -218,9 +220,7 @@ pub async fn exec(
 
             if effective_cross_project {
                 if let Some(impacts) = report["impacts"].as_array_mut() {
-                    impacts.retain(|i| {
-                        i["consumers"].as_array().map_or(false, |c| !c.is_empty())
-                    });
+                    impacts.retain(|i| i["consumers"].as_array().is_some_and(|c| !c.is_empty()));
                 }
                 // Recount after filtering
                 let filtered_count = report["impacts"].as_array().map_or(0, |a| a.len());
@@ -232,12 +232,12 @@ pub async fn exec(
                     // Cross-project mode: only fail when confirmed consumers are found.
                     report["summary"]["cross_project_consumers"]
                         .as_array()
-                        .map_or(false, |a| !a.is_empty())
+                        .is_some_and(|a| !a.is_empty())
                 } else {
                     // No cross-project lookup: fail if any columns land in a public model.
                     report["summary"]["total_impacts"]
                         .as_u64()
-                        .map_or(false, |n| n > 0)
+                        .is_some_and(|n| n > 0)
                 };
                 if should_fail {
                     return Err(DbtpError::ImpactFound(report));
@@ -275,11 +275,13 @@ fn consumer_summary_table(report: &serde_json::Value) -> serde_json::Value {
                     let key = (
                         c["model"].as_str().unwrap_or("").to_string(),
                         public_model.clone(),
-                        c["project_id"].as_str()
+                        c["project_id"]
+                            .as_str()
                             .map(String::from)
                             .or_else(|| c["project_id"].as_u64().map(|n| n.to_string()))
                             .unwrap_or_default(),
-                        c["environment_id"].as_u64()
+                        c["environment_id"]
+                            .as_u64()
                             .map(|n| n.to_string())
                             .unwrap_or_default(),
                     );
@@ -319,15 +321,17 @@ fn consumer_summary_table(report: &serde_json::Value) -> serde_json::Value {
 
     let mut rows: Vec<serde_json::Value> = counts
         .into_iter()
-        .map(|((consumer, public_model, project_id, environment_id), col_count)| {
-            json!({
-                "consumer_model": consumer,
-                "public_model": public_model,
-                "project_id": project_id,
-                "environment_id": environment_id,
-                "impacted_columns": col_count,
-            })
-        })
+        .map(
+            |((consumer, public_model, project_id, environment_id), col_count)| {
+                json!({
+                    "consumer_model": consumer,
+                    "public_model": public_model,
+                    "project_id": project_id,
+                    "environment_id": environment_id,
+                    "impacted_columns": col_count,
+                })
+            },
+        )
         .collect();
 
     rows.sort_by(|a, b| {

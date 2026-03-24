@@ -18,11 +18,7 @@ pub async fn list(
         .await
 }
 
-pub async fn get(
-    client: &RestClient,
-    project_id: u64,
-    environment_id: u64,
-) -> Result<Value> {
+pub async fn get(client: &RestClient, project_id: u64, environment_id: u64) -> Result<Value> {
     client
         .get_v3(
             &format!("projects/{project_id}/environments/{environment_id}/"),
@@ -31,16 +27,9 @@ pub async fn get(
         .await
 }
 
-pub async fn create(
-    client: &RestClient,
-    project_id: u64,
-    body: &Value,
-) -> Result<Value> {
+pub async fn create(client: &RestClient, project_id: u64, body: &Value) -> Result<Value> {
     client
-        .post_v3(
-            &format!("projects/{project_id}/environments/"),
-            body,
-        )
+        .post_v3(&format!("projects/{project_id}/environments/"), body)
         .await
 }
 
@@ -58,11 +47,7 @@ pub async fn update(
         .await
 }
 
-pub async fn delete(
-    client: &RestClient,
-    project_id: u64,
-    environment_id: u64,
-) -> Result<Value> {
+pub async fn delete(client: &RestClient, project_id: u64, environment_id: u64) -> Result<Value> {
     client
         .delete_v3(&format!(
             "projects/{project_id}/environments/{environment_id}/"

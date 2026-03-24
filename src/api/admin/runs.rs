@@ -17,9 +17,7 @@ pub async fn get(client: &RestClient, run_id: u64) -> Result<Value> {
 
 pub async fn get_with_steps(client: &RestClient, run_id: u64) -> Result<Value> {
     let params = vec![("include_related".into(), "run_steps".into())];
-    client
-        .get_v2(&format!("runs/{run_id}/"), &params)
-        .await
+    client.get_v2(&format!("runs/{run_id}/"), &params).await
 }
 
 pub async fn cancel(client: &RestClient, run_id: u64) -> Result<Value> {

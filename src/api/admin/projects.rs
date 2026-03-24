@@ -12,9 +12,7 @@ pub async fn list(
 }
 
 pub async fn get(client: &RestClient, project_id: u64) -> Result<Value> {
-    client
-        .get_v3(&format!("projects/{project_id}/"), &[])
-        .await
+    client.get_v3(&format!("projects/{project_id}/"), &[]).await
 }
 
 pub async fn create(client: &RestClient, body: &Value) -> Result<Value> {
@@ -28,7 +26,5 @@ pub async fn update(client: &RestClient, project_id: u64, body: &Value) -> Resul
 }
 
 pub async fn delete(client: &RestClient, project_id: u64) -> Result<Value> {
-    client
-        .delete_v3(&format!("projects/{project_id}/"))
-        .await
+    client.delete_v3(&format!("projects/{project_id}/")).await
 }

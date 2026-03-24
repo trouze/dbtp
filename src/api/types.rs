@@ -1,3 +1,7 @@
+// These types model the dbt Cloud API envelope/pagination shape for serde.
+// They are defined for documentation and future use; not all are constructed today.
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 /// The standard dbt Cloud API response envelope.

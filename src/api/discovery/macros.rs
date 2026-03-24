@@ -32,7 +32,7 @@ pub async fn list(
         macros.retain(|m| {
             m["packageName"]
                 .as_str()
-                .map_or(true, |pkg| !is_builtin_package(pkg))
+                .is_none_or(|pkg| !is_builtin_package(pkg))
         });
     }
 
@@ -41,7 +41,7 @@ pub async fn list(
         macros.retain(|m| {
             m["packageName"]
                 .as_str()
-                .map_or(false, |p| p.to_lowercase() == pkg_lower)
+                .is_some_and(|p| p.to_lowercase() == pkg_lower)
         });
     }
 

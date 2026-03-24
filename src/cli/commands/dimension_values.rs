@@ -40,10 +40,8 @@ pub async fn exec(
 
     match &args.command {
         DimensionValuesCommand::List { metrics, group_by } => {
-            semantic_layer::queries::list_dimension_values(
-                client, &host, env_id, metrics, group_by,
-            )
-            .await
+            semantic_layer::queries::list_dimension_values(client, &host, env_id, metrics, group_by)
+                .await
         }
     }
 }
