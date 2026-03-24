@@ -316,7 +316,10 @@ mod tests {
 
     #[test]
     fn normalize_host_adds_https() {
-        assert_eq!(normalize_host("cloud.getdbt.com".into()), "https://cloud.getdbt.com");
+        assert_eq!(
+            normalize_host("cloud.getdbt.com".into()),
+            "https://cloud.getdbt.com"
+        );
     }
 
     #[test]
@@ -329,7 +332,10 @@ mod tests {
 
     #[test]
     fn normalize_host_preserves_http() {
-        assert_eq!(normalize_host("http://localhost".into()), "http://localhost");
+        assert_eq!(
+            normalize_host("http://localhost".into()),
+            "http://localhost"
+        );
     }
 
     #[test]
@@ -403,7 +409,10 @@ mod tests {
             output = "json"
         "#;
         let file: ConfigFile = toml::from_str(toml).unwrap();
-        assert_eq!(file.connection.host.as_deref(), Some("https://tk626.us1.dbt.com"));
+        assert_eq!(
+            file.connection.host.as_deref(),
+            Some("https://tk626.us1.dbt.com")
+        );
         assert_eq!(file.connection.account_id, Some(7));
         assert_eq!(file.defaults.project_id.as_deref(), Some("42"));
         assert_eq!(file.defaults.output, "json");
