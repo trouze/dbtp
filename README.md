@@ -1,5 +1,9 @@
 # dbtp — dbt Cloud Platform CLI
 
+[![CI](https://github.com/trouze/dbtp/actions/workflows/ci.yml/badge.svg)](https://github.com/trouze/dbtp/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/trouze/dbtp)](https://github.com/trouze/dbtp/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 A fast, ergonomic command-line interface for the [dbt Cloud](https://www.getdbt.com/product/dbt-cloud) platform APIs. Manage accounts, projects, environments, jobs, and runs. Browse your dbt DAG through the Discovery API. Query metrics through the Semantic Layer. All from your terminal.
 
 ```

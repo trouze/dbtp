@@ -7,11 +7,7 @@ use super::paginate;
 
 const GET_EXPOSURES: &str = include_str!("queries/get_exposures.graphql");
 
-pub async fn list(
-    client: &GraphqlClient,
-    host: &str,
-    environment_id: u64,
-) -> Result<Vec<Value>> {
+pub async fn list(client: &GraphqlClient, host: &str, environment_id: u64) -> Result<Vec<Value>> {
     paginate(
         client,
         host,

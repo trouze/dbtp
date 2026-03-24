@@ -44,11 +44,7 @@ pub enum EnvironmentsCommand {
     Delete { id: u64 },
 }
 
-pub async fn exec(
-    args: &EnvironmentsArgs,
-    client: &RestClient,
-    config: &Config,
-) -> Result<Value> {
+pub async fn exec(args: &EnvironmentsArgs, client: &RestClient, config: &Config) -> Result<Value> {
     let raw_pid = args
         .project_id
         .as_deref()

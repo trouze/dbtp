@@ -1,3 +1,7 @@
+// These types model Semantic Layer API response shapes for serde.
+// Not all are directly constructed today; defined for schema documentation.
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

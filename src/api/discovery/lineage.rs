@@ -10,13 +10,7 @@ use super::metadata_url;
 const GET_FULL_LINEAGE: &str = include_str!("queries/get_full_lineage.graphql");
 
 const ALL_LINEAGE_TYPES: &[&str] = &[
-    "Analysis",
-    "Exposure",
-    "Model",
-    "Seed",
-    "Snapshot",
-    "Source",
-    "Test",
+    "Analysis", "Exposure", "Model", "Seed", "Snapshot", "Source", "Test",
 ];
 
 /// Fetch lineage graph filtered to nodes connected to `unique_id`.
@@ -131,7 +125,7 @@ fn filter_connected_nodes(nodes: &[Value], target_id: &str, depth: u32) -> Vec<V
         .filter(|n| {
             n["uniqueId"]
                 .as_str()
-                .map_or(false, |uid| connected.contains(uid))
+                .is_some_and(|uid| connected.contains(uid))
         })
         .cloned()
         .collect()

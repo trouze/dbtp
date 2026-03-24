@@ -46,7 +46,11 @@ pub async fn exec(args: &ConfigArgs) -> Result<()> {
             for key in &keys {
                 match config::get_property(key)? {
                     Some(val) => {
-                        let display = if *key == "token" { mask_token(&val) } else { val };
+                        let display = if *key == "token" {
+                            mask_token(&val)
+                        } else {
+                            val
+                        };
                         println!("{key} = {display}");
                     }
                     None => println!("{key} = (not set)"),
@@ -56,7 +60,11 @@ pub async fn exec(args: &ConfigArgs) -> Result<()> {
 
         ConfigCommand::Get { key } => match config::get_property(key)? {
             Some(val) => {
-                let display = if key == "token" { mask_token(&val) } else { val };
+                let display = if key == "token" {
+                    mask_token(&val)
+                } else {
+                    val
+                };
                 println!("{display}");
             }
             None => eprintln!("{key} is not set"),
@@ -64,7 +72,14 @@ pub async fn exec(args: &ConfigArgs) -> Result<()> {
 
         ConfigCommand::Set { key, value } => {
             config::set_property(key, value)?;
-            eprintln!("Set {key} = {}", if key == "token" { mask_token(value) } else { value.clone() });
+            eprintln!(
+                "Set {key} = {}",
+                if key == "token" {
+                    mask_token(value)
+                } else {
+                    value.clone()
+                }
+            );
         }
 
         ConfigCommand::Unset { key } => {

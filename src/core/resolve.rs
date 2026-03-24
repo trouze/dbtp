@@ -93,10 +93,7 @@ pub async fn resolve_environment(
 
 /// Resolve the production environment for a project.
 /// Finds the environment with deployment_type == "production".
-pub async fn resolve_production_environment(
-    client: &RestClient,
-    project_id: u64,
-) -> Result<u64> {
+pub async fn resolve_production_environment(client: &RestClient, project_id: u64) -> Result<u64> {
     let envs = environments::list(client, project_id, &[], None).await?;
     envs.iter()
         .find(|e| e["deployment_type"].as_str() == Some("production"))

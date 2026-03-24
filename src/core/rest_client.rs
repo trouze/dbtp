@@ -30,8 +30,11 @@ impl RestClient {
     }
 
     pub fn account_id(&self) -> Result<u64> {
-        self.account_id
-            .ok_or_else(|| DbtpError::config("account_id is required; set via --account-id, DBTP_ACCOUNT_ID, or `dbtp init`"))
+        self.account_id.ok_or_else(|| {
+            DbtpError::config(
+                "account_id is required; set via --account-id, DBTP_ACCOUNT_ID, or `dbtp init`",
+            )
+        })
     }
 
     /// v2 base: /api/v2/accounts/{id}
@@ -75,11 +78,13 @@ impl RestClient {
         self.post_raw(&url, body, ApiVersion::V3).await
     }
 
+    #[allow(dead_code)]
     pub async fn patch_v2(&self, path: &str, body: &Value) -> Result<Value> {
         let url = self.v2_url(path)?;
         self.patch_raw(&url, body, ApiVersion::V2).await
     }
 
+    #[allow(dead_code)]
     pub async fn patch_v3(&self, path: &str, body: &Value) -> Result<Value> {
         let url = self.v3_url(path)?;
         self.patch_raw(&url, body, ApiVersion::V3).await
@@ -126,6 +131,7 @@ impl RestClient {
         self.handle_response(resp).await
     }
 
+    #[allow(dead_code)]
     async fn patch_raw(&self, url: &str, body: &Value, version: ApiVersion) -> Result<Value> {
         let resp = self
             .client

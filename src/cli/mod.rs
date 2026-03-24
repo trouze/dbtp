@@ -4,8 +4,8 @@ pub mod output;
 use clap::{Parser, Subcommand};
 
 use self::commands::{
-    accounts, artifacts, config_cmd, dimension_values, environments, exposures, init, jobs,
-    lineage, macros, metrics, models, projects, runs, saved_queries, seeds, semantic_models,
+    accounts, artifacts, audit_logs, config_cmd, dimension_values, environments, exposures, init,
+    jobs, lineage, macros, metrics, models, projects, runs, saved_queries, seeds, semantic_models,
     snapshots, sources, system, tests,
 };
 
@@ -179,6 +179,26 @@ pub enum Commands {
             dbtp artifacts get 901244 run_results.json -o json"
     )]
     Artifacts(artifacts::ArtifactsArgs),
+
+    /// Fetch and export dbt Cloud audit log events
+    #[command(
+        long_about = "Fetch and export dbt Cloud audit log events.\n\n\
+            List recent events or export incrementally since a given timestamp.\n\
+            Export writes NDJSON (newline-delimited JSON), compatible with Datadog,\n\
+            Azure Monitor, BigQuery, Splunk, and other log ingestion systems.\n\n\
+            Cloud storage destinations shell out to the respective CLI tool,\n\
+            which must be installed and authenticated separately:\n\
+            gs:// → gsutil   s3:// → aws s3   az:// → az storage blob\n\n\
+            Note: This command requires an Enterprise dbt Cloud plan.",
+        after_long_help = "EXAMPLES:\n  \
+            dbtp audit-logs list\n  \
+            dbtp audit-logs export --since 2026-01-01T00:00:00Z\n  \
+            dbtp audit-logs export --since 2026-01-01T00:00:00Z --output ./audit-logs.ndjson\n  \
+            dbtp audit-logs export --since 2026-01-01T00:00:00Z --output gs://my-bucket/audit-logs/\n  \
+            dbtp audit-logs export --since 2026-01-01T00:00:00Z --output s3://my-bucket/audit-logs/\n  \
+            dbtp audit-logs export --since 2026-01-01T00:00:00Z --output az://myaccount/mylogs/audit-logs/"
+    )]
+    AuditLogs(audit_logs::AuditLogsArgs),
 
     // ── Discovery API ──────────────────────────────────
     /// Browse dbt models via the Discovery API

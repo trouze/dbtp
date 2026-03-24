@@ -13,7 +13,8 @@ const GET_COLUMN_LINEAGE: &str = include_str!("queries/get_column_lineage.graphq
 const GET_MODELS_WITH_PATHS: &str = include_str!("queries/get_models_with_paths.graphql");
 const GET_MODELS_WITH_ACCESS: &str = include_str!("queries/get_models_with_access.graphql");
 const GET_FULL_LINEAGE: &str = include_str!("queries/get_full_lineage.graphql");
-const GET_PUBLIC_PARENT_CONSUMERS: &str = include_str!("queries/get_public_parent_consumers.graphql");
+const GET_PUBLIC_PARENT_CONSUMERS: &str =
+    include_str!("queries/get_public_parent_consumers.graphql");
 
 /// Fetch column-level lineage for a single model.
 ///
@@ -50,18 +51,15 @@ pub async fn fetch(
     if downstream_only || upstream_only {
         let depths = compute_relative_depths(&all_columns, node_unique_id);
 
-        all_columns = all_columns
-            .into_iter()
-            .filter(|col| {
-                let uid = col["uniqueId"].as_str().unwrap_or("");
-                let depth = depths.get(uid).copied().unwrap_or(0);
-                if downstream_only {
-                    depth >= 0
-                } else {
-                    depth <= 0
-                }
-            })
-            .collect();
+        all_columns.retain(|col| {
+            let uid = col["uniqueId"].as_str().unwrap_or("");
+            let depth = depths.get(uid).copied().unwrap_or(0);
+            if downstream_only {
+                depth >= 0
+            } else {
+                depth <= 0
+            }
+        });
     }
 
     rewrite_depths(&mut all_columns, node_unique_id);
@@ -153,14 +151,21 @@ pub async fn resolve_files_to_unique_ids(
     )
     .await?;
 
-    eprintln!("resolving {} file path(s) against {} models in environment", file_paths.len(), models.len());
+    eprintln!(
+        "resolving {} file path(s) against {} models in environment",
+        file_paths.len(),
+        models.len()
+    );
 
     let mut resolved = Vec::new();
     let mut unmatched = Vec::new();
 
     for input_path in file_paths {
         let normalized = normalize_path(input_path);
-        eprintln!("  matching input: {:?} (normalized: {:?})", input_path, normalized);
+        eprintln!(
+            "  matching input: {:?} (normalized: {:?})",
+            input_path, normalized
+        );
         let mut found = false;
 
         for model in &models {
@@ -287,7 +292,9 @@ async fn discover_deployment_envs(rest: &RestClient, exclude_env: u64) -> Result
     let mut env_ids: Vec<u64> = Vec::new();
 
     for proj in &all_projects {
-        let Some(pid) = proj["id"].as_u64() else { continue };
+        let Some(pid) = proj["id"].as_u64() else {
+            continue;
+        };
         let envs = environments::list(rest, pid, &[], None).await?;
         for env in &envs {
             if env["type"].as_str() == Some("deployment") {
@@ -363,7 +370,7 @@ pub async fn build_impact_report(
             client,
             host,
             environment_id,
-            &[uid.clone()],
+            std::slice::from_ref(uid),
             &public_model_ids,
         )
         .await?;
@@ -380,8 +387,7 @@ pub async fn build_impact_report(
             continue;
         }
 
-        let public_set: HashSet<&str> =
-            downstream_public.iter().map(String::as_str).collect();
+        let public_set: HashSet<&str> = downstream_public.iter().map(String::as_str).collect();
 
         let columns = fetch(client, host, environment_id, uid, true, false).await?;
         let column_list = columns.as_array().cloned().unwrap_or_default();
@@ -427,16 +433,15 @@ pub async fn build_impact_report(
 
         for ds_env_id in &target_env_ids {
             for pm_id in &impacted_public_models {
-                let consumers =
-                    match find_consumers_in_env(client, host, *ds_env_id, pm_id).await {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!(
+                let consumers = match find_consumers_in_env(client, host, *ds_env_id, pm_id).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!(
                                 "warning: could not query env {ds_env_id} for consumers of {pm_id}: {e}"
                             );
-                            continue;
-                        }
-                    };
+                        continue;
+                    }
+                };
 
                 for node in consumers {
                     consumers_by_public_model
@@ -500,4 +505,133 @@ fn suffix_match(input: &str, model_path: &str) -> bool {
         return false;
     }
     model_path.ends_with(input) || input.ends_with(model_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── normalize_path ────────────────────────────────────────────────────────
+
+    #[test]
+    fn normalize_path_lowercases() {
+        assert_eq!(normalize_path("Models/Orders.sql"), "models/orders.sql");
+    }
+
+    #[test]
+    fn normalize_path_converts_backslash() {
+        assert_eq!(normalize_path("models\\orders.sql"), "models/orders.sql");
+    }
+
+    #[test]
+    fn normalize_path_trims_whitespace() {
+        assert_eq!(normalize_path("  models/orders.sql  "), "models/orders.sql");
+    }
+
+    // ── suffix_match ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn suffix_match_input_suffix_of_model() {
+        assert!(suffix_match("orders.sql", "models/orders.sql"));
+    }
+
+    #[test]
+    fn suffix_match_model_suffix_of_input() {
+        assert!(suffix_match("models/orders.sql", "orders.sql"));
+    }
+
+    #[test]
+    fn suffix_match_exact() {
+        assert!(suffix_match("models/orders.sql", "models/orders.sql"));
+    }
+
+    #[test]
+    fn suffix_match_no_match() {
+        assert!(!suffix_match("customers.sql", "models/orders.sql"));
+    }
+
+    #[test]
+    fn suffix_match_empty_input_returns_false() {
+        assert!(!suffix_match("", "models/orders.sql"));
+    }
+
+    #[test]
+    fn suffix_match_empty_model_returns_false() {
+        assert!(!suffix_match("orders.sql", ""));
+    }
+
+    // ── compute_relative_depths ───────────────────────────────────────────────
+
+    fn make_col(unique_id: &str, node_id: &str, children: &[&str], parents: &[&str]) -> Value {
+        json!({
+            "uniqueId": unique_id,
+            "nodeUniqueId": node_id,
+            "childColumns": children,
+            "parentColumns": parents,
+        })
+    }
+
+    #[test]
+    fn depth_zero_for_target_columns() {
+        let cols = vec![make_col(
+            "model.proj.orders.amount",
+            "model.proj.orders",
+            &[],
+            &[],
+        )];
+        let depths = compute_relative_depths(&cols, "model.proj.orders");
+        assert_eq!(depths.get("model.proj.orders.amount"), Some(&0));
+    }
+
+    #[test]
+    fn depth_positive_for_downstream() {
+        let cols = vec![
+            make_col(
+                "model.proj.orders.amount",
+                "model.proj.orders",
+                &["model.proj.revenue.amount"],
+                &[],
+            ),
+            make_col(
+                "model.proj.revenue.amount",
+                "model.proj.revenue",
+                &[],
+                &["model.proj.orders.amount"],
+            ),
+        ];
+        let depths = compute_relative_depths(&cols, "model.proj.orders");
+        assert_eq!(depths.get("model.proj.orders.amount"), Some(&0));
+        assert_eq!(depths.get("model.proj.revenue.amount"), Some(&1));
+    }
+
+    #[test]
+    fn depth_negative_for_upstream() {
+        let cols = vec![
+            make_col(
+                "model.proj.orders.amount",
+                "model.proj.orders",
+                &[],
+                &["model.proj.raw.amount"],
+            ),
+            make_col(
+                "model.proj.raw.amount",
+                "model.proj.raw",
+                &["model.proj.orders.amount"],
+                &[],
+            ),
+        ];
+        let depths = compute_relative_depths(&cols, "model.proj.orders");
+        assert_eq!(depths.get("model.proj.orders.amount"), Some(&0));
+        assert_eq!(depths.get("model.proj.raw.amount"), Some(&-1));
+    }
+
+    #[test]
+    fn unconnected_column_has_no_depth() {
+        let cols = vec![
+            make_col("model.proj.orders.amount", "model.proj.orders", &[], &[]),
+            make_col("model.proj.other.name", "model.proj.other", &[], &[]),
+        ];
+        let depths = compute_relative_depths(&cols, "model.proj.orders");
+        assert!(!depths.contains_key("model.proj.other.name"));
+    }
 }

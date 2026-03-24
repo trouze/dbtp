@@ -60,14 +60,12 @@ pub fn metadata_url(host: &str) -> String {
 }
 
 pub fn require_environment_id(config: &Config) -> Result<u64> {
-    config
-        .environment_id_u64()
-        .ok_or_else(|| {
-            DbtpError::config(
-                "environment_id is required for Discovery API; \
+    config.environment_id_u64().ok_or_else(|| {
+        DbtpError::config(
+            "environment_id is required for Discovery API; \
                  set via --environment-id or DBTP_ENVIRONMENT_ID",
-            )
-        })
+        )
+    })
 }
 
 /// Extract nodes from paginated GraphQL edges: `[{node: ...}, ...]` -> `[...]`
@@ -142,7 +140,7 @@ pub async fn paginate(
         let should_continue = has_next
             && end_cursor
                 .as_ref()
-                .map_or(false, |c| cursor.as_ref().map_or(true, |prev| prev != c));
+                .is_some_and(|c| cursor.as_ref() != Some(c));
 
         if should_continue {
             cursor = end_cursor;
@@ -157,4 +155,60 @@ pub async fn paginate(
 /// Determine if an identifier is a unique_id (contains dots) vs a plain name.
 pub fn is_unique_id(identifier: &str) -> bool {
     identifier.contains('.')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_url_multi_tenant() {
+        assert_eq!(
+            metadata_url("https://tk626.us1.dbt.com"),
+            "https://tk626.metadata.us1.dbt.com"
+        );
+    }
+
+    #[test]
+    fn metadata_url_multi_tenant_trailing_slash() {
+        assert_eq!(
+            metadata_url("https://tk626.us1.dbt.com/"),
+            "https://tk626.metadata.us1.dbt.com"
+        );
+    }
+
+    #[test]
+    fn metadata_url_legacy() {
+        assert_eq!(
+            metadata_url("https://cloud.getdbt.com"),
+            "https://metadata.cloud.getdbt.com"
+        );
+    }
+
+    #[test]
+    fn metadata_url_already_transformed() {
+        // Idempotent — should not double-insert "metadata."
+        assert_eq!(
+            metadata_url("https://tk626.metadata.us1.dbt.com"),
+            "https://tk626.metadata.us1.dbt.com"
+        );
+    }
+
+    #[test]
+    fn metadata_url_http_scheme_preserved() {
+        assert_eq!(
+            metadata_url("http://tk626.us1.dbt.com"),
+            "http://tk626.metadata.us1.dbt.com"
+        );
+    }
+
+    #[test]
+    fn is_unique_id_with_dots() {
+        assert!(is_unique_id("model.my_project.orders"));
+    }
+
+    #[test]
+    fn is_unique_id_plain_name() {
+        assert!(!is_unique_id("orders"));
+    }
 }
